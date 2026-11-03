@@ -1,4 +1,4 @@
-module c3spirv;
+module ardot::c3spirv;
 import std::io;
 
 fn int main(String[] args)
