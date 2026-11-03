@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/Ardot66/c3c_ast.c3l.git
 	branch = main
-	commit = fd2dd7da2f279f3ef8de5f20484f150973f8f415
-	parent = 95f4aaadddfb0475ada2c68803315323d137f63e
+	commit = 40bded07a0c6161ea569973a82cb8d2f8fcce47a
+	parent = 1d10419b904b57062d4b60a609b8d139aa1ce9a0
 	method = merge
 	cmdver = 0.4.9
