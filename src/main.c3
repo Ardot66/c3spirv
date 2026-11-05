@@ -28,8 +28,12 @@ constdef Opcode : ushort {
 	VARIABLE = 59,
 	LOAD = 61,
 	STORE = 62,
+	ACCESS_CHAIN = 65,
+	PTR_ACCESS_CHAIN = 67,
 	DECORATE = 71,
 	MEMBER_DECORATE = 72,
+	I_MUL = 132,
+	F_MUL = 133,
 	LABEL = 248,
 	RETURN = 253,
 	TYPE_UNTYPED_POINTER = 4417,
@@ -65,15 +69,23 @@ constdef ExecutionMode : inline uint {
 }
 
 constdef StorageClass : inline uint {
+	INPUT = 1,
 	UNIFORM = 2,
+	OUTPUT = 3,
 	PHYSICAL_STORAGE_BUFFER = 5349,
 }
 
 constdef Decoration : inline uint {
 	BLOCK = 2,
+	ARRAY_STRIDE = 6,
+	BUILTIN = 11,
 	BINDING = 33,
 	DESCRIPTOR_SET = 34,
 	OFFSET = 35,
+}
+
+constdef Builtin : inline uint {
+	GLOBAL_INVOCATION_ID = 28,
 }
 
 bitstruct FunctionControl : uint {
@@ -270,6 +282,7 @@ fn Id? EmissionContext.get_type_id(&self, Type* type, SourceLocId reference_loc)
 }
 
 fn Id EmissionContext.generate_id(&self) {
+
 	defer self.id_count += 1;
 	return (Id)self.id_count;
 }
@@ -429,8 +442,10 @@ struct Root {
 
 fn int main(String[] args)
 {
-	// GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
-    // defer ast::free_ast();
+	emit_sample_program();
+
+	GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
+    defer ast::free_ast();
 
 	io::File out_file = file::open("output.spv", "w")!!;
 	defer out_file.close();
@@ -439,66 +454,6 @@ fn int main(String[] args)
 	const sz VMEM_SIZE = 1024 * 1024 * 64;
 	context.init(VMEM_SIZE);
 	defer context.free();
-
-	context.init_ops.op(&context, CAPABILITY, Capability.SHADER);
-	context.init_ops.op(&context, CAPABILITY, Capability.UNTYPED_POINTERS);
-	context.init_ops.op(&context, CAPABILITY, Capability.PHYSICAL_STORAGE_BUFFER_ADDRESSES);
-	context.init_ops.op_raw(&context, EXTENSION, str_literal("SPV_KHR_untyped_pointers"));
-	context.init_ops.op(&context, MEMORY_MODEL, AddressingModel.PHYSICAL_STORAGE_BUFFER_64, MemoryModel.GLSL450);
-
-	Id void_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_VOID, void_type);
-
-	Id function_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_FUNCTION, function_type, void_type);
-
-	Id float_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_FLOAT, float_type, 32);
-
-	Id uint_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_INT, uint_type, 32, 0);
-
-	Id physical_ptr_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_UNTYPED_POINTER, physical_ptr_type, StorageClass.PHYSICAL_STORAGE_BUFFER);
-
-	Id root_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_STRUCT, root_type, physical_ptr_type, physical_ptr_type, uint_type);
-	context.decoration_ops.op(&context, DECORATE, root_type, Decoration.BLOCK);
-	context.decoration_ops.op(&context, MEMBER_DECORATE, root_type, 0, Decoration.OFFSET, 0);
-	context.decoration_ops.op(&context, MEMBER_DECORATE, root_type, 1, Decoration.OFFSET, 8);
-	context.decoration_ops.op(&context, MEMBER_DECORATE, root_type, 2, Decoration.OFFSET, 16);
-
-	Id uniform_ptr_type = context.generate_id();
-	context.type_ops.op(&context, TYPE_UNTYPED_POINTER, uniform_ptr_type, StorageClass.UNIFORM);
-
-	Id root_variable = context.generate_id();
-	context.type_ops.op(&context, UNTYPED_VARIABLE, uniform_ptr_type, root_variable, StorageClass.UNIFORM, root_type);
-	context.decoration_ops.op(&context, DECORATE, root_variable, Decoration.BINDING, 0);
-	context.decoration_ops.op(&context, DECORATE, root_variable, Decoration.DESCRIPTOR_SET, 0);
-
-	Id function = context.generate_id();
-	context.func_ops.op(&context, FUNCTION, void_type, function, (uint)(FunctionControl){}, function_type);
-	Id label = context.generate_id();
-	context.func_ops.op(&context, LABEL, label);
-
-	Id const_1 = context.generate_id();
-	context.type_ops.op(&context, CONSTANT, uint_type, const_1, 1);
-
-	Id out_buf_ref_ref = context.generate_id();
-	context.func_ops.op(&context, UNTYPED_IN_BOUNDS_ACCESS_CHAIN, uniform_ptr_type, out_buf_ref_ref, root_type, root_variable, const_1);
-
-	Id out_buf_ref = context.generate_id();
-	context.func_ops.op(&context, LOAD, physical_ptr_type, out_buf_ref, out_buf_ref_ref);
-
-	Id const_2f = context.generate_id();
-	context.type_ops.op(&context, CONSTANT, float_type, const_2f, bitcast(2f, uint));
-	context.func_ops.op(&context, STORE, out_buf_ref, const_2f, (uint)(MemoryOperands){.aligned}, 4);
-
-	context.func_ops.op(&context, RETURN);
-	context.func_ops.op(&context, FUNCTION_END);
-
-	context.init_ops.op_raw(&context, ENTRY_POINT, {ExecutionModel.COMPUTE, function}, str_literal("main"), {root_variable});
-	context.init_ops.op(&context, EXECUTION_MODE, function, ExecutionMode.LOCAL_SIZE, 64, 1, 1);
 
 	// ast::@vec_foreach(gc.module_list; Module* mod) {
 	// 	ast::@vec_foreach(mod.units; CompilationUnit* unit) {
