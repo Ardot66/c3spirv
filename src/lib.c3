@@ -5,10 +5,10 @@ struct ComputeBuiltin {
 	uint[<3>] local_invocation_id;
 }
 
-enum ExecutionModel {
-	VERTEX,
-	FRAGMENT,
-	COMPUTE,
+constdef ExecutionModel : inline uint {
+	VERTEX = 0,
+	FRAGMENT = 4,
+	COMPUTE = 5,
 }
 
 enum Attribute @private {
@@ -16,4 +16,4 @@ enum Attribute @private {
 }
 
 const String C3SPIRV_TAG = "c3spirv_builtin";
-attrdef @Shader(ExecutionModel model) = @tag(C3SPIRV_TAG, Attribute.SHADER, model);
+attrdef @Shader(ExecutionModel model) = @tag(C3SPIRV_TAG, {Attribute.SHADER, model});
