@@ -429,8 +429,8 @@ struct Root {
 
 fn int main(String[] args)
 {
-	GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
-	defer ast::free_ast();
+	// GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
+    // defer ast::free_ast();
 
 	io::File out_file = file::open("output.spv", "w")!!;
 	defer out_file.close();
