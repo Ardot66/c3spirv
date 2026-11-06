@@ -83,10 +83,8 @@ fn void? eval_entry_func(EmissionContext* context, Decl* decl) {
 	Id void_type = context.type_op(TYPE_VOID);
 	Id func_type = context.type_op(TYPE_FUNCTION, void_type);
 
-	Id func = context.generate_id();
-	context.func_ops.op(context, FUNCTION, void_type, func, (uint)(FunctionControl){}, func_type);
-	Id label = context.generate_id();
-	// context.func_ops.op(context, LABEL, );
+	Id func = context.func_op(FUNCTION, void_type, (uint)(FunctionControl){}, func_type);
+	Id label = context.func_op(LABEL);
 
 	// context.get_type_id(decl.type, decl.loc)!;
 	// Id id = context.generate_id();

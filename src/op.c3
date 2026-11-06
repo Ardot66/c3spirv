@@ -164,6 +164,14 @@ fn Id OpStream.op(&self, EmissionContext* context, Opcode opcode, uint... operan
 	return self.op_raw(context, opcode, operands);
 }
 
+fn Id EmissionContext.init_op_raw(&self, Opcode opcode, uint[]... operands) {
+	return self.init_ops.op_raw(self, opcode, ...operands);
+}
+
+fn Id EmissionContext.init_op(&self, Opcode opcode, uint... operands) {
+	return self.init_ops.op(self, opcode, ...operands);
+}
+
 fn Id EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
 	sz mark = self.vmem.mark();
 
@@ -184,6 +192,22 @@ fn Id EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
 
 fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
 	return self.type_op_raw(opcode, operands);
+}
+
+fn Id EmissionContext.decoration_op_raw(&self, Opcode opcode, uint[]... operands) {
+	return self.decoration_ops.op_raw(self, opcode, ...operands);
+}
+
+fn Id EmissionContext.decoration_op(&self, Opcode opcode, uint... operands) {
+	return self.decoration_ops.op(self, opcode, ...operands);
+}
+
+fn Id EmissionContext.func_op_raw(&self, Opcode opcode, uint[]... operands) {
+	return self.func_ops.op_raw(self, opcode, ...operands);
+}
+
+fn Id EmissionContext.func_op(&self, Opcode opcode, uint... operands) {
+	return self.func_ops.op(self, opcode, ...operands);
 }
 
 fn Id? EmissionContext.get_type_id(&self, Type* type, SourceLocId reference_loc) {
