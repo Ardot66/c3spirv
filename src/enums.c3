@@ -34,10 +34,53 @@ constdef Opcode : ushort {
 	F_MUL = 133,
 	LABEL = 248,
 	RETURN = 253,
-	TYPE_UNTYPED_POINTER = 4417,
-	UNTYPED_VARIABLE = 4418,
-	UNTYPED_ACCESS_CHAIN = 4419,
-	UNTYPED_IN_BOUNDS_ACCESS_CHAIN = 4420,
+}
+
+<*
+ Returns the operand index which should contain the result ID of the op.
+ Returns 0 if the op has no result.
+*>
+fn uint Opcode.result_index(self) {
+	switch(self) {
+		case EXTENSION:
+		case MEMORY_MODEL:
+		case ENTRY_POINT:
+		case EXECUTION_MODE:
+		case CAPABILITY:
+		case TYPE_FORWARD_POINTER:
+		case FUNCTION_END:
+		case STORE:
+		case DECORATE:
+		case MEMBER_DECORATE:
+		case RETURN:
+			return 0;
+		case TYPE_VOID:
+		case TYPE_BOOL:
+		case TYPE_INT:
+		case TYPE_FLOAT:
+		case TYPE_VECTOR:
+		case TYPE_MATRIX:
+		case TYPE_ARRAY:
+		case TYPE_STRUCT:
+		case TYPE_POINTER:
+		case TYPE_FUNCTION:
+		case LABEL:
+			return 1;
+		case CONSTANT_TRUE:
+		case CONSTANT_FALSE:
+		case CONSTANT:
+		case FUNCTION:
+		case FUNCTION_PARAMETER:
+		case VARIABLE:
+		case LOAD:
+		case ACCESS_CHAIN:
+		case PTR_ACCESS_CHAIN:
+		case I_MUL:
+		case F_MUL:
+			return 2;
+	}
+
+	unreachable("The opcode %s is missing from the result_index function", self);
 }
 
 constdef Capability : inline uint {

@@ -7,7 +7,7 @@ typedef Id = inline uint;
 struct EmissionContext {
 	Vmem vmem;
 	uint id_count;
-	HashMap{TypeOp, Id} type_ids;
+	HashMap{HashOp, Id} type_ids;
 
 	OpStream init_ops;
 	OpStream decoration_ops;
@@ -108,22 +108,26 @@ fn void EmissionContext.free(&self) {
 	self.type_ids.free();
 }
 
-fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+fn Id EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
 	sz mark = self.vmem.mark();
 
-	Id id = self.generate_id();
-	Op* op = self.create_op(opcode, {id}, operands);
+	Id result @noinit;
+	Op* op = self.create_op(opcode, &result, ... operands);
 
-	Id? existing_id = self.type_ids[(TypeOp){op}];
+	Id? existing_id = self.type_ids[(HashOp)op];
 	if(try existing_id) {
 		self.vmem.reset(mark);
 		self.id_count -= 1;
 		return existing_id;
 	}
 
-	self.type_ids[(TypeOp){op}] = id;
+	self.type_ids[(HashOp)op] = result;
 	self.type_ops.add_op(op);
-	return id;
+	return result;
+}
+
+fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+	return self.type_op_raw(opcode, operands);
 }
 
 fn Id? EmissionContext.get_type_id(&self, Type* type, SourceLocId reference_loc) {
@@ -248,35 +252,57 @@ fn uint Op.opsize(&self) {
 	return self.operands[0] >> 16;
 }
 
-struct TypeOp {
-	Op* op;
+fn Opcode Op.opcode(&self) {
+	return (Opcode)(self.operands[0] & 0xFFFF);
 }
 
-fn uint TypeOp.hash(self) {
-	uint hash = builtin::@generic_hash(self.op.operands[0]);
-	uint opsize = self.op.opsize();
-	for(sz i = 2; i < opsize; i++) {
-		hash = builtin::@generic_hash_core(hash, self.op.operands[i]);
+fn uint Op.result_index(&self) => self.opcode().result_index();
+
+fn uint Op.hash(&self) {
+	uint hash = builtin::@generic_hash(self.operands[0]);
+	uint opsize = self.opsize();
+	uint result_index = self.result_index();
+	for(sz i = 1; i < opsize; i++) {
+		if(i == result_index) {
+			continue;
+		}
+		hash = builtin::@generic_hash_core(hash, self.operands[i]);
 	}
 	return hash;
 }
 
-fn bool TypeOp.equals(a, TypeOp b) @operator(==) {
-	if(b.op.operands[0] != a.op.operands[0]) {
+fn bool Op.equals(&a, Op* b) {
+	if(b.operands[0] != a.operands[0]) {
 		return false;
 	}
 
-	uint opsize_a = a.op.opsize();
-	uint opsize_b = b.op.opsize();
+	uint opsize_a = a.opsize();
+	uint opsize_b = b.opsize();
 	if(opsize_a != opsize_b) {
 		return false;
 	}
 
-	return a.op.operands[2..opsize_a - 1] == b.op.operands[2..opsize_b - 1];
+	uint result_index = a.result_index();
+	for(sz i = 1; i < opsize_a; i++) {
+		if(i == result_index) {
+			continue;
+		} else if(a.operands[i] != b.operands[i]) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
-fn Op* EmissionContext.create_op(&self, Opcode opcode, uint[]... operands) {
-	sz opsize = 1;
+typedef HashOp = inline Op*;
+
+fn uint HashOp.hash(self) => Op.hash(self);
+fn bool HashOp.equals(a, HashOp b) @operator(==) => Op.equals(a, b);
+
+fn Op* EmissionContext.create_op(&self, Opcode opcode, Id* result, uint[]... operands) {
+	uint result_index = opcode.result_index();
+
+	sz opsize = 1 + (sz)(result_index > 0);
 	for(sz i = 0; i < operands.len; i++) {
 		opsize += operands[i].len;
 	}
@@ -286,9 +312,17 @@ fn Op* EmissionContext.create_op(&self, Opcode opcode, uint[]... operands) {
 	Op* op = alloc::malloc(&self.vmem, Op::size + opsize * uint::size);
 	op.next = null;
 
+	Id id = self.generate_id();
+	op.operands[result_index] = id;
+	*result = id;
+
 	op.operands[0] = (uint)opsize << 16 + (ushort)opcode;
 	for(sz x = 0, sz p = 1; x < operands.len; x++) {
 		for(sz y = 0; y < operands[x].len; y++, p++) {
+			if(result_index != 0 && result_index == p) {
+				p += 1;
+			}
+
 			op.operands[p] = operands[x][y];
 		}
 	}
@@ -305,12 +339,14 @@ fn void OpStream.add_op(self, Op* op) {
 	self.last_op = op;
 }
 
-fn void OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]... operands) {
-	self.add_op(context.create_op(opcode, ...operands));
+fn Id OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]... operands) {
+	Id result @noinit;
+	self.add_op(context.create_op(opcode, &result, ...operands));
+	return result;
 }
 
-fn void OpStream.op(&self, EmissionContext* context, Opcode opcode, uint... operands) {
-	self.op_raw(context, opcode, operands);
+fn Id OpStream.op(&self, EmissionContext* context, Opcode opcode, uint... operands) {
+	return self.op_raw(context, opcode, operands);
 }
 
 fn Expr*[] eval_untyped_list(Expr *expr) {
