@@ -7,7 +7,7 @@ typedef Id = inline uint;
 struct EmissionContext {
 	Vmem vmem;
 	uint id_count;
-	HashMap{void*, Id} type_ids;
+	HashMap{TypeOp, Id} type_ids;
 
 	OpStream init_ops;
 	OpStream decoration_ops;
@@ -108,78 +108,97 @@ fn void EmissionContext.free(&self) {
 	self.type_ids.free();
 }
 
+fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+	sz mark = self.vmem.mark();
+
+	Id id = self.generate_id();
+	Op* op = self.create_op(opcode, {id}, operands);
+
+	Id? existing_id = self.type_ids[(TypeOp){op}];
+	if(try existing_id) {
+		self.vmem.reset(mark);
+		self.id_count -= 1;
+		return existing_id;
+	}
+
+	self.type_ids[(TypeOp){op}] = id;
+	self.type_ops.add_op(op);
+	return id;
+}
+
 fn Id? EmissionContext.get_type_id(&self, Type* type, SourceLocId reference_loc) {
-	Id? id = self.type_ids[type];
-	if(try id) {
-		return id;
-	}
+	// Id? id = self.type_ids[type];
+	// if(try id) {
+	// 	return id;
+	// }
 
-	Id new_id = self.generate_id();
-	switch(type.type_kind) {
-		case TYPE_VOID: self.type_ops.op(self, TYPE_VOID, new_id);
-		case TYPE_BOOL: self.type_ops.op(self, TYPE_BOOL, new_id);
-		case TYPE_I8: self.type_ops.op(self, TYPE_INT, new_id, 8, 1);
-		case TYPE_I16: self.type_ops.op(self, TYPE_INT, new_id, 16, 1);
-		case TYPE_I32: self.type_ops.op(self, TYPE_INT, new_id, 32, 1);
-		case TYPE_I64: self.type_ops.op(self, TYPE_INT, new_id, 64, 1);
-		// case TYPE_I128: // unsupported for now.
-		case TYPE_U8: self.type_ops.op(self, TYPE_INT, new_id, 8, 0);
-		case TYPE_U16: self.type_ops.op(self, TYPE_INT, new_id, 16, 0);
-		case TYPE_U32: self.type_ops.op(self, TYPE_INT, new_id, 32, 0);
-		case TYPE_U64: self.type_ops.op(self, TYPE_INT, new_id, 64, 0);
-		// case TYPE_U128: // unsupported for now.
-		case TYPE_F16: self.type_ops.op(self, TYPE_FLOAT, new_id, 16);
-		// case TYPE_BF16: // unsupported for now.
-		case TYPE_F32: self.type_ops.op(self, TYPE_FLOAT, new_id, 32);
-		case TYPE_F64: self.type_ops.op(self, TYPE_FLOAT, new_id, 64);
-		// case TYPE_F128: // unsupported for now.
-		// case TYPE_ANY: // runtime reflection in shaders is probably unnecessary.
-		// case TYPE_TYPEID:
+	// Id new_id = self.generate_id();
+	// switch(type.type_kind) {
+	// 	case TYPE_VOID: self.type_ops.op(self, TYPE_VOID, new_id);
+	// 	case TYPE_BOOL: self.type_ops.op(self, TYPE_BOOL, new_id);
+	// 	case TYPE_I8: self.type_ops.op(self, TYPE_INT, new_id, 8, 1);
+	// 	case TYPE_I16: self.type_ops.op(self, TYPE_INT, new_id, 16, 1);
+	// 	case TYPE_I32: self.type_ops.op(self, TYPE_INT, new_id, 32, 1);
+	// 	case TYPE_I64: self.type_ops.op(self, TYPE_INT, new_id, 64, 1);
+	// 	// case TYPE_I128: // unsupported for now.
+	// 	case TYPE_U8: self.type_ops.op(self, TYPE_INT, new_id, 8, 0);
+	// 	case TYPE_U16: self.type_ops.op(self, TYPE_INT, new_id, 16, 0);
+	// 	case TYPE_U32: self.type_ops.op(self, TYPE_INT, new_id, 32, 0);
+	// 	case TYPE_U64: self.type_ops.op(self, TYPE_INT, new_id, 64, 0);
+	// 	// case TYPE_U128: // unsupported for now.
+	// 	case TYPE_F16: self.type_ops.op(self, TYPE_FLOAT, new_id, 16);
+	// 	// case TYPE_BF16: // unsupported for now.
+	// 	case TYPE_F32: self.type_ops.op(self, TYPE_FLOAT, new_id, 32);
+	// 	case TYPE_F64: self.type_ops.op(self, TYPE_FLOAT, new_id, 64);
+	// 	// case TYPE_F128: // unsupported for now.
+	// 	// case TYPE_ANY: // runtime reflection in shaders is probably unnecessary.
+	// 	// case TYPE_TYPEID:
 
-		case TYPE_FUNC_PTR:
-			nextcase default;
-		case TYPE_POINTER:
-			Type* inner = type.pointer;
-			Id inner_id = self.get_type_id(inner, reference_loc)!;
-			self.type_ops.op(self, TYPE_UNTYPED_POINTER, new_id, StorageClass.PHYSICAL_STORAGE_BUFFER);
-		case TYPE_TYPEDEF:
-		case TYPE_CONSTSET:
-		case TYPE_ENUM:
-			nextcase default;
-		case TYPE_FUNC_RAW: @pool() {
-			TypeFunction *func = &type.function;
+	// 	case TYPE_FUNC_PTR:
+	// 		nextcase default;
+	// 	case TYPE_POINTER:
+	// 		Type* inner = type.pointer;
+	// 		Id inner_id = self.get_type_id(inner, reference_loc)!;
+	// 		self.type_ops.op(self, TYPE_UNTYPED_POINTER, new_id, StorageClass.PHYSICAL_STORAGE_BUFFER);
+	// 	case TYPE_TYPEDEF:
+	// 	case TYPE_CONSTSET:
+	// 	case TYPE_ENUM:
+	// 		nextcase default;
+	// 	case TYPE_FUNC_RAW: @pool() {
+	// 		TypeFunction *func = &type.function;
 
-			Decl*[] params = ast::vec(func.signature.params);
-			Id[] param_ids = mem::talloc_array(Id, params.len);
+	// 		Decl*[] params = ast::vec(func.signature.params);
+	// 		Id[] param_ids = mem::talloc_array(Id, params.len);
 
-			for(sz i = 0; i < params.len; i++) {
-				param_ids[i] = self.get_type_id(params[i].type, params[i].loc)!;
-			}
+	// 		for(sz i = 0; i < params.len; i++) {
+	// 			param_ids[i] = self.get_type_id(params[i].type, params[i].loc)!;
+	// 		}
 
-			TypeInfo* ret_type = ast::type_info_ptr(func.signature.rtype);
-			Id ret_id = self.get_type_id(ret_type.type, ret_type.loc)!;
-			self.type_ops.op_raw(self, TYPE_FUNCTION, {new_id, ret_id}, (uint[])param_ids);
-		};
-		case TYPE_STRUCT:
-		case TYPE_UNION:
-		case TYPE_BITSTRUCT:
-		case TYPE_ALIAS:
-		case TYPE_UNTYPEDLIST:
-		case TYPE_SLICE:
-		case TYPE_ARRAY:
-		case TYPE_FLEXIBLE_ARRAY:
-		case TYPE_INFERRED_ARRAY:
-		case TYPE_VECTOR:
-		case TYPE_SIMD_VECTOR:
-		case TYPE_INFERRED_VECTOR:
-		case TYPE_OPTIONAL:
-			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-		default:
-			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-	}
+	// 		TypeInfo* ret_type = ast::type_info_ptr(func.signature.rtype);
+	// 		Id ret_id = self.get_type_id(ret_type.type, ret_type.loc)!;
+	// 		self.type_ops.op_raw(self, TYPE_FUNCTION, {new_id, ret_id}, (uint[])param_ids);
+	// 	};
+	// 	case TYPE_STRUCT:
+	// 	case TYPE_UNION:
+	// 	case TYPE_BITSTRUCT:
+	// 	case TYPE_ALIAS:
+	// 	case TYPE_UNTYPEDLIST:
+	// 	case TYPE_SLICE:
+	// 	case TYPE_ARRAY:
+	// 	case TYPE_FLEXIBLE_ARRAY:
+	// 	case TYPE_INFERRED_ARRAY:
+	// 	case TYPE_VECTOR:
+	// 	case TYPE_SIMD_VECTOR:
+	// 	case TYPE_INFERRED_VECTOR:
+	// 	case TYPE_OPTIONAL:
+	// 		return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
+	// 	default:
+	// 		return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
+	// }
 
-	self.type_ids[type] = new_id;
-	return new_id;
+	// self.type_ids[type] = new_id;
+	// return new_id;
+	unreachable();
 }
 
 fn Id EmissionContext.generate_id(&self) {
@@ -225,7 +244,38 @@ struct Op {
 	uint[*] operands;
 }
 
-fn void OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]... operands) {
+fn uint Op.opsize(&self) {
+	return self.operands[0] >> 16;
+}
+
+struct TypeOp {
+	Op* op;
+}
+
+fn uint TypeOp.hash(self) {
+	uint hash = builtin::@generic_hash(self.op.operands[0]);
+	uint opsize = self.op.opsize();
+	for(sz i = 2; i < opsize; i++) {
+		hash = builtin::@generic_hash_core(hash, self.op.operands[i]);
+	}
+	return hash;
+}
+
+fn bool TypeOp.equals(a, TypeOp b) @operator(==) {
+	if(b.op.operands[0] != a.op.operands[0]) {
+		return false;
+	}
+
+	uint opsize_a = a.op.opsize();
+	uint opsize_b = b.op.opsize();
+	if(opsize_a != opsize_b) {
+		return false;
+	}
+
+	return a.op.operands[2..opsize_a - 1] == b.op.operands[2..opsize_b - 1];
+}
+
+fn Op* EmissionContext.create_op(&self, Opcode opcode, uint[]... operands) {
 	sz opsize = 1;
 	for(sz i = 0; i < operands.len; i++) {
 		opsize += operands[i].len;
@@ -233,7 +283,7 @@ fn void OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]..
 
 	assert(opsize <= ushort::max);
 
-	Op* op = alloc::malloc(&context.vmem, Op::size + opsize * uint::size);
+	Op* op = alloc::malloc(&self.vmem, Op::size + opsize * uint::size);
 	op.next = null;
 
 	op.operands[0] = (uint)opsize << 16 + (ushort)opcode;
@@ -242,7 +292,10 @@ fn void OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]..
 			op.operands[p] = operands[x][y];
 		}
 	}
+	return op;
+}
 
+fn void OpStream.add_op(self, Op* op) {
 	if(self.first_op == null) {
 		self.first_op = op;
 		self.last_op = op;
@@ -250,6 +303,10 @@ fn void OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]..
 
 	self.last_op.next = op;
 	self.last_op = op;
+}
+
+fn void OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]... operands) {
+	self.add_op(context.create_op(opcode, ...operands));
 }
 
 fn void OpStream.op(&self, EmissionContext* context, Opcode opcode, uint... operands) {
@@ -274,6 +331,13 @@ fn long eval_const_enum(Expr* expr) {
 	return enum_decl.inner_ordinal;
 }
 
+fn long eval_const_int(Expr* expr) {
+	ExprConst* const_value = &expr.const_expr;
+	assert(const_value.const_kind == CONST_INTEGER);
+
+	return (long)const_value.ixx.i.low;
+}
+
 fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 	if(!decl.has_tag) {
 		return NOT_FOUND~;
@@ -292,7 +356,7 @@ fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 			}
 			
 			String string = (String)((char*)name.bytes.ptr)[..name.bytes.len - 1];
-			if(string != C3SPIRV_TAG) {
+			if(string != TAG) {
 				break;
 			}
 
@@ -309,16 +373,33 @@ fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 	return NOT_FOUND~;
 }
 
-fn void? eval_func(EmissionContext* context, Decl* decl) {
+fn void? eval_entry_func(EmissionContext* context, Decl* decl) {
 	assert(decl.decl_kind == DECL_FUNC);
 	Expr*[]? params = get_attribute(decl, SHADER);
 	if(catch params) {
 		return;
 	}
 
-	ExecutionModel execution_model = (ExecutionModel)eval_const_enum(params[0]);
+	ExecutionModel execution_model = (ExecutionModel)eval_const_int(params[0]);
 
-	context.get_type_id(decl.type, decl.loc)!;
+	uint[<3>] group_size;
+	{
+		ExprConst* const_value = &params[1].const_expr;
+		ConstInitializer*[] initializers = ast::vec(const_value.initializer.init_array_full);
+		group_size.x = (uint)eval_const_int(initializers[0].init_value);
+		group_size.y = (uint)eval_const_int(initializers[1].init_value);
+		group_size.z = (uint)eval_const_int(initializers[2].init_value);
+	}
+
+	Id void_type = context.type_op(TYPE_VOID);
+	Id func_type = context.type_op(TYPE_FUNCTION, void_type);
+
+	Id func = context.generate_id();
+	context.func_ops.op(context, FUNCTION, void_type, func, (uint)(FunctionControl){}, func_type);
+	Id label = context.generate_id();
+	// context.func_ops.op(context, LABEL, );
+
+	// context.get_type_id(decl.type, decl.loc)!;
 	// Id id = context.generate_id();
 	// context.func_ops.op(context, FUNCTION, );
 	// context.init_ops.op(context, ENTRY_POINT, );
@@ -335,15 +416,9 @@ fn uint[] str_literal(String string) {
 	return literal;
 }
 
-struct Root {
-	float* in_buf;
-	float* out_buf;
-	uint count;
-}
-
 fn int main(String[] args)
 {
-	emit_sample_program();
+	// emit_sample_program();
 
 	GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
     defer ast::free_ast();
@@ -356,15 +431,19 @@ fn int main(String[] args)
 	context.init(VMEM_SIZE);
 	defer context.free();
 
-	// ast::@vec_foreach(gc.module_list; Module* mod) {
-	// 	ast::@vec_foreach(mod.units; CompilationUnit* unit) {
-	// 		ast::@vec_foreach(unit.functions; Decl* function) {
-	// 			if(catch eval_func(&context, function)) {
-	// 				return 1;
-	// 			}
-	// 		};
-	// 	};
-	// };
+	context.init_ops.op(&context, CAPABILITY, Capability.SHADER);
+	context.init_ops.op(&context, CAPABILITY, Capability.PHYSICAL_STORAGE_BUFFER_ADDRESSES);
+	context.init_ops.op(&context, MEMORY_MODEL, AddressingModel.PHYSICAL_STORAGE_BUFFER_64, MemoryModel.GLSL450);
+
+	ast::@vec_foreach(gc.module_list; Module* mod) {
+		ast::@vec_foreach(mod.units; CompilationUnit* unit) {
+			ast::@vec_foreach(unit.functions; Decl* function) {
+				if(catch eval_entry_func(&context, function)) {
+					return 1;
+				}
+			};
+		};
+	};
 
 	context.write(&out_file)!!;
 	return 0;

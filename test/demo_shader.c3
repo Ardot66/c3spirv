@@ -7,7 +7,7 @@ struct ComputeRoot {
 	uint count;
 }
 
-fn void compute(ComputeBuiltin *builtin, ComputeRoot* root) @Shader(COMPUTE) {
+fn void compute(ComputeBuiltin *builtin, ComputeRoot* root) @ComputeShader({64, 1, 1}) {
 	uint id = builtin.global_invocation_id.x;
 	if(id < root.count) {
 		root.output[id] = root.input[id] * 2f;
