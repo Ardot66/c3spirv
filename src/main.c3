@@ -329,7 +329,7 @@ fn Op* EmissionContext.create_op(&self, Opcode opcode, Id* result, uint[]... ope
 	return op;
 }
 
-fn void OpStream.add_op(self, Op* op) {
+fn void OpStream.add_op(&self, Op* op) {
 	if(self.first_op == null) {
 		self.first_op = op;
 		self.last_op = op;
@@ -454,7 +454,7 @@ fn uint[] str_literal(String string) {
 
 fn int main(String[] args)
 {
-	// emit_sample_program();
+	emit_sample_program();
 
 	GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
     defer ast::free_ast();
