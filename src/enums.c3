@@ -30,6 +30,7 @@ constdef Opcode : ushort {
 	PTR_ACCESS_CHAIN = 67,
 	DECORATE = 71,
 	MEMBER_DECORATE = 72,
+	BITCAST = 124,
 	I_MUL = 132,
 	F_MUL = 133,
 	LABEL = 248,
@@ -77,6 +78,7 @@ fn uint Opcode.result_index(self) {
 		case PTR_ACCESS_CHAIN:
 		case I_MUL:
 		case F_MUL:
+		case BITCAST:
 			return 2;
 	}
 
@@ -113,6 +115,8 @@ constdef StorageClass : inline uint {
 	INPUT = 1,
 	UNIFORM = 2,
 	OUTPUT = 3,
+	FUNCTION = 7,
+	STORAGE_BUFFER = 12,
 	PHYSICAL_STORAGE_BUFFER = 5349,
 }
 

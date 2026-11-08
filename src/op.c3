@@ -19,7 +19,8 @@ typedef HashOp = inline Op*;
 struct EmissionContext {
 	Vmem vmem;
 	uint id_count;
-	HashMap{HashOp, Id} type_ids;
+	HashMap{HashOp, SpirvType*} types;
+	HashMap{HashOp, Id} global_ids;
 
 	OpStream init_ops;
 	OpStream decoration_ops;
@@ -72,13 +73,15 @@ fn bool HashOp.equals(a, HashOp b) @operator(==) => Op.equals(a, b);
 
 fn void EmissionContext.init(&self, sz vmem_size) {
 	self.vmem.init(vmem_size)!!;
-	self.type_ids.init(mem);
+	self.types.init(&self.vmem);
+	self.global_ids.init(&self.vmem);
 	self.id_count = 1;
 }
 
 fn void EmissionContext.free(&self) {
 	self.vmem.free();
-	self.type_ids.free();
+	self.types.free();
+	self.global_ids.free();
 }
 
 fn Id EmissionContext.generate_id(&self) {
@@ -172,25 +175,29 @@ fn Id EmissionContext.init_op(&self, Opcode opcode, uint... operands) {
 	return self.init_ops.op(self, opcode, ...operands);
 }
 
-fn Id EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
+fn SpirvType* EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
 	sz mark = self.vmem.mark();
 
 	Id result @noinit;
 	Op* op = self.create_op(opcode, &result, ... operands);
 
-	Id? existing_id = self.type_ids[(HashOp)op];
-	if(try existing_id) {
+	SpirvType*? existing_type = self.types[(HashOp)op];
+	if(try existing_type) {
 		self.vmem.reset(mark);
 		self.id_count -= 1;
-		return existing_id;
+		return existing_type;
 	}
 
-	self.type_ids[(HashOp)op] = result;
+	SpirvType* type = alloc::new(&self.vmem, SpirvType, {
+		.id = result,
+	});
+
+	self.types[(HashOp)op] = type;
 	self.type_ops.add_op(op);
-	return result;
+	return type;
 }
 
-fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+fn SpirvType* EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
 	return self.type_op_raw(opcode, operands);
 }
 
@@ -210,78 +217,207 @@ fn Id EmissionContext.func_op(&self, Opcode opcode, uint... operands) {
 	return self.func_ops.op(self, opcode, ...operands);
 }
 
-fn Id? EmissionContext.get_type_id(&self, Type* type, SourceLocId reference_loc) {
-	// Id? id = self.type_ids[type];
-	// if(try id) {
-	// 	return id;
-	// }
-
-	// Id new_id = self.generate_id();
-	// switch(type.type_kind) {
-	// 	case TYPE_VOID: self.type_ops.op(self, TYPE_VOID, new_id);
-	// 	case TYPE_BOOL: self.type_ops.op(self, TYPE_BOOL, new_id);
-	// 	case TYPE_I8: self.type_ops.op(self, TYPE_INT, new_id, 8, 1);
-	// 	case TYPE_I16: self.type_ops.op(self, TYPE_INT, new_id, 16, 1);
-	// 	case TYPE_I32: self.type_ops.op(self, TYPE_INT, new_id, 32, 1);
-	// 	case TYPE_I64: self.type_ops.op(self, TYPE_INT, new_id, 64, 1);
-	// 	// case TYPE_I128: // unsupported for now.
-	// 	case TYPE_U8: self.type_ops.op(self, TYPE_INT, new_id, 8, 0);
-	// 	case TYPE_U16: self.type_ops.op(self, TYPE_INT, new_id, 16, 0);
-	// 	case TYPE_U32: self.type_ops.op(self, TYPE_INT, new_id, 32, 0);
-	// 	case TYPE_U64: self.type_ops.op(self, TYPE_INT, new_id, 64, 0);
-	// 	// case TYPE_U128: // unsupported for now.
-	// 	case TYPE_F16: self.type_ops.op(self, TYPE_FLOAT, new_id, 16);
-	// 	// case TYPE_BF16: // unsupported for now.
-	// 	case TYPE_F32: self.type_ops.op(self, TYPE_FLOAT, new_id, 32);
-	// 	case TYPE_F64: self.type_ops.op(self, TYPE_FLOAT, new_id, 64);
-	// 	// case TYPE_F128: // unsupported for now.
-	// 	// case TYPE_ANY: // runtime reflection in shaders is probably unnecessary.
-	// 	// case TYPE_TYPEID:
-
-	// 	case TYPE_FUNC_PTR:
-	// 		nextcase default;
-	// 	case TYPE_POINTER:
-	// 		Type* inner = type.pointer;
-	// 		Id inner_id = self.get_type_id(inner, reference_loc)!;
-	// 		self.type_ops.op(self, TYPE_UNTYPED_POINTER, new_id, StorageClass.PHYSICAL_STORAGE_BUFFER);
-	// 	case TYPE_TYPEDEF:
-	// 	case TYPE_CONSTSET:
-	// 	case TYPE_ENUM:
-	// 		nextcase default;
-	// 	case TYPE_FUNC_RAW: @pool() {
-	// 		TypeFunction *func = &type.function;
-
-	// 		Decl*[] params = ast::vec(func.signature.params);
-	// 		Id[] param_ids = mem::talloc_array(Id, params.len);
-
-	// 		for(sz i = 0; i < params.len; i++) {
-	// 			param_ids[i] = self.get_type_id(params[i].type, params[i].loc)!;
-	// 		}
-
-	// 		TypeInfo* ret_type = ast::type_info_ptr(func.signature.rtype);
-	// 		Id ret_id = self.get_type_id(ret_type.type, ret_type.loc)!;
-	// 		self.type_ops.op_raw(self, TYPE_FUNCTION, {new_id, ret_id}, (uint[])param_ids);
-	// 	};
-	// 	case TYPE_STRUCT:
-	// 	case TYPE_UNION:
-	// 	case TYPE_BITSTRUCT:
-	// 	case TYPE_ALIAS:
-	// 	case TYPE_UNTYPEDLIST:
-	// 	case TYPE_SLICE:
-	// 	case TYPE_ARRAY:
-	// 	case TYPE_FLEXIBLE_ARRAY:
-	// 	case TYPE_INFERRED_ARRAY:
-	// 	case TYPE_VECTOR:
-	// 	case TYPE_SIMD_VECTOR:
-	// 	case TYPE_INFERRED_VECTOR:
-	// 	case TYPE_OPTIONAL:
-	// 		return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-	// 	default:
-	// 		return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-	// }
-
-	// self.type_ids[type] = new_id;
-	// return new_id;
-	unreachable();
+struct SpirvTypeInfo {
+	bitstruct : uint {
+		bool explicit_class;
+		bool builtin;
+		bool root;
+	}
+	StorageClass class;
 }
+
+struct SpirvDeclInfo {
+	SpirvType* type;
+	Id variable;
+}
+
+fn SpirvTypeInfo* type_info(EmissionContext* context, Type* type) {
+	if(type.backend_type) {
+		return type.backend_type;
+	}
+
+	SpirvTypeInfo* info = alloc::new(&context.vmem, SpirvTypeInfo);
+	switch(type.type_kind) {
+		case TYPE_STRUCT:
+			Decl* decl = type.decl;
+			if(try get_attribute(decl, SHADER_ROOT)) {
+				info.explicit_class = true;
+				info.root = true;
+				info.class = UNIFORM;	
+			}  else {
+				info.explicit_class = true;
+				info.class = INPUT;
+			}
+		default: break;
+	}
+
+	type.backend_type = info;
+	return info;
+}
+
+struct TypeContext {
+	bitstruct : uint {
+		bool uniform_ptr;
+		bool in_root;
+	}
+}
+
+fn SpirvType*? spirv_type(EmissionContext* context, Type* type, SourceLocId reference_loc, TypeContext type_context = {}) {
+	SpirvTypeInfo* info = type_info(context, type);
+	SpirvType* stype;
+	switch(type.type_kind) {
+		case TYPE_VOID: stype = context.type_op(TYPE_VOID);
+		case TYPE_BOOL: stype = context.type_op(TYPE_BOOL);
+		case TYPE_I8: stype = context.type_op(TYPE_INT, 8, 1);
+		case TYPE_I16: stype = context.type_op(TYPE_INT, 16, 1);
+		case TYPE_I32: stype = context.type_op(TYPE_INT, 32, 1);
+		case TYPE_I64: stype = context.type_op(TYPE_INT, 64, 1);
+		// case TYPE_I128: // unsupported for now.
+		case TYPE_U8: stype = context.type_op(TYPE_INT, 8, 0);
+		case TYPE_U16: stype = context.type_op(TYPE_INT, 16, 0);
+		case TYPE_U32: stype = context.type_op(TYPE_INT, 32, 0);
+		case TYPE_U64: stype = context.type_op(TYPE_INT, 64, 0);
+		// case TYPE_U128: // unsupported for now.
+		case TYPE_F16: stype = context.type_op(TYPE_FLOAT, 16);
+		// case TYPE_BF16: // unsupported for now.
+		case TYPE_F32: stype = context.type_op(TYPE_FLOAT, 32);
+		case TYPE_F64: stype = context.type_op(TYPE_FLOAT, 64);
+		// case TYPE_F128: // unsupported for now.
+
+		case TYPE_POINTER:
+			Type* inner = type.pointer;
+			StorageClass class = FUNCTION;
+			if(type_context.uniform_ptr) {
+				class = UNIFORM;
+				type_context.uniform_ptr = false;
+			} else if(type_context.in_root) {
+				class = PHYSICAL_STORAGE_BUFFER;
+			}
+
+			SpirvType* inner_type = spirv_type(context, inner, reference_loc, type_context)!;
+			stype = context.type_op(TYPE_POINTER, class, inner_type.id);
+			stype.pointer = {
+				.inner = inner_type,
+				.class = class,
+			};
+		case TYPE_STRUCT: @pool() {
+			if(info.root) {
+				type_context.in_root = true;
+			}
+
+			StructDecl* struct_decl = &type.decl.strukt;
+			Decl*[] members = ast::vec(struct_decl.members);
+
+			SpirvType*[] member_types = alloc::alloc_array(&context.vmem, SpirvType*, members.len);
+			Id[] member_ids = mem::talloc_array(Id, members.len);
+
+			foreach(sz i, Decl* member : members) {
+				SpirvType* member_type = spirv_type(context, member.type, member.loc, type_context)!;
+				member_types[i] = member_type;
+				member_ids[i] = member_type.id;
+			};
+
+			SpirvType* struct_type = context.type_op_raw(TYPE_STRUCT, (uint[])member_ids);
+			if(!struct_type.type) {
+				if(info.root) {
+					context.decoration_op(DECORATE, struct_type.id, Decoration.BLOCK);
+				}
+				foreach(sz i, Decl* member : members) {
+					context.decoration_op(MEMBER_DECORATE, struct_type.id, (uint)i, Decoration.OFFSET, (uint)member.offset);
+				}
+
+				struct_type.members = member_types;
+			}
+
+			stype = struct_type;
+		};
+		default:
+			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
+	}
+
+	assert(stype);
+	if(stype.type == null) {
+		stype.type = type;
+	}
+
+	return stype;
+}
+
+fn Id? EmissionContext.decl_id(&self, Decl* decl) {
+	assert(decl.decl_kind == DECL_VAR);
+
+	if(decl.backend_ref) {
+		return (Id)(uptr)decl.backend_ref;
+	}
+
+	Type* type = decl.type;
+	return {};
+}
+
+// fn Id? EmissionContext.type_id(&self, Type* type, SourceLocId reference_loc) {
+// 	switch(type.type_kind) {
+// 		case TYPE_VOID: return self.type_op(TYPE_VOID);
+// 		case TYPE_BOOL: return self.type_op(TYPE_BOOL);
+// 		case TYPE_I8: return self.type_op(TYPE_INT, 8, 1);
+// 		case TYPE_I16: return self.type_op(TYPE_INT, 16, 1);
+// 		case TYPE_I32: return self.type_op(TYPE_INT, 32, 1);
+// 		case TYPE_I64: return self.type_op(TYPE_INT, 64, 1);
+// 		// case TYPE_I128: // unsupported for now.
+// 		case TYPE_U8: return self.type_op(TYPE_INT, 8, 0);
+// 		case TYPE_U16: return self.type_op(TYPE_INT, 16, 0);
+// 		case TYPE_U32: return self.type_op(TYPE_INT, 32, 0);
+// 		case TYPE_U64: return self.type_op(TYPE_INT, 64, 0);
+// 		// case TYPE_U128: // unsupported for now.
+// 		case TYPE_F16: return self.type_op(TYPE_FLOAT, 16);
+// 		// case TYPE_BF16: // unsupported for now.
+// 		case TYPE_F32: return self.type_op(TYPE_FLOAT, 32);
+// 		case TYPE_F64: return self.type_op(TYPE_FLOAT, 64);
+// 		// case TYPE_F128: // unsupported for now.
+// 		// case TYPE_ANY: // runtime reflection in shaders is probably unnecessary.
+// 		// case TYPE_TYPEID:
+
+// 		case TYPE_FUNC_PTR:
+// 		case TYPE_POINTER:
+// 			nextcase default;
+// 			// Type* inner = type.pointer;
+// 			// Id inner_id = self.get_type_id(inner, reference_loc)!;
+// 			// self.type_ops.op(self, TYPE_UNTYPED_POINTER, new_id, StorageClass.PHYSICAL_STORAGE_BUFFER);
+// 		case TYPE_TYPEDEF:
+// 		case TYPE_CONSTSET:
+// 		case TYPE_ENUM:
+// 			nextcase default;
+// 		case TYPE_FUNC_RAW: @pool() {
+// 			TypeFunction *func = &type.function;
+
+// 			Decl*[] params = ast::vec(func.signature.params);
+// 			Id[] param_ids = mem::talloc_array(Id, params.len);
+
+// 			for(sz i = 0; i < params.len; i++) {
+// 				param_ids[i] = self.type_id(params[i].type, params[i].loc)!;
+// 			}
+
+// 			TypeInfo* ret_type = ast::type_info_ptr(func.signature.rtype);
+// 			Id ret_id = self.type_id(ret_type.type, ret_type.loc)!;
+// 			// self.type_ops.op_raw(self, TYPE_FUNCTION, {new_id, ret_id}, (uint[])param_ids);
+// 		};
+// 		case TYPE_STRUCT:
+// 		case TYPE_UNION:
+// 		case TYPE_BITSTRUCT:
+// 		case TYPE_ALIAS:
+// 		case TYPE_UNTYPEDLIST:
+// 		case TYPE_SLICE:
+// 		case TYPE_ARRAY:
+// 		case TYPE_FLEXIBLE_ARRAY:
+// 		case TYPE_INFERRED_ARRAY:
+// 		case TYPE_VECTOR:
+// 		case TYPE_SIMD_VECTOR:
+// 		case TYPE_INFERRED_VECTOR:
+// 		case TYPE_OPTIONAL:
+// 			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
+// 		default:
+// 			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
+// 	}
+
+// 	unreachable();
+// }
 

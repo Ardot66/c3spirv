@@ -60,9 +60,16 @@ fn void error_msg(SourceLocId loc_id, String error_kind, String format, args...)
 		io::eprintf("%6d: %s\n", line.line, line.content);
 	}
 
-	for(sz i = 0; i < (sz)loc.col - 1 + 8; i++) {
-		io::eprintf(" ");
+	LineInfo* error_line = &lines[^1];
+	for(sz i = 0; i < (sz)loc.col; i++) {
+		char character = error_line.content[i];
+		if(character == '\t') {
+			io::eprintf("\t");
+		} else {
+			io::eprintf(" ");
+		}
 	}
+	io::eprintf("       ");
 
 	for(sz i = 0; i < loc.length; i++) {
 		io::eprintf("^");
