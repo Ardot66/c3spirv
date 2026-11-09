@@ -1,7 +1,5 @@
-module ardot::c3spirv @private;
-import ardot::c3c::ast, std::io, std::collections::map;
-
-typedef Id = inline uint;
+module ardot::c3spirv;
+import ardot::c3c::ast, std::io, std::collections::map, std::collections::list;
 
 struct OpStream {
 	Op* first_op;
@@ -17,16 +15,22 @@ struct Op {
 typedef HashOp = inline Op*;
 
 struct EmissionContext {
+	List{SpirvEntryPoint} entry_points;
+
 	Vmem vmem;
 	uint id_count;
-	HashMap{HashOp, SpirvType*} types;
-	HashMap{HashOp, Id} global_ids;
+	HashMap{char[], SpirvType*} types;
+	HashMap{Expr*, SpirvExpr*} spirv_expressions;
+	// HashMap{HashOp, SpirvType*} types;
+	// HashMap{HashOp, Id} global_ids;
 
 	OpStream init_ops;
 	OpStream decoration_ops;
 	OpStream type_ops;
 	OpStream func_ops;
 }
+
+fn uint Expr.hash(Expr* self) => void*.hash(self);
 
 fn uint Op.opsize(&self) => self.operands[0] >> 16;
 fn Opcode Op.opcode(&self) => (Opcode)(self.operands[0] & 0xFFFF);
@@ -73,15 +77,14 @@ fn bool HashOp.equals(a, HashOp b) @operator(==) => Op.equals(a, b);
 
 fn void EmissionContext.init(&self, sz vmem_size) {
 	self.vmem.init(vmem_size)!!;
+	self.entry_points.init(&self.vmem);
 	self.types.init(&self.vmem);
-	self.global_ids.init(&self.vmem);
+	// self.global_ids.init(&self.vmem);
 	self.id_count = 1;
 }
 
 fn void EmissionContext.free(&self) {
 	self.vmem.free();
-	self.types.free();
-	self.global_ids.free();
 }
 
 fn Id EmissionContext.generate_id(&self) {
@@ -175,31 +178,31 @@ fn Id EmissionContext.init_op(&self, Opcode opcode, uint... operands) {
 	return self.init_ops.op(self, opcode, ...operands);
 }
 
-fn SpirvType* EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
-	sz mark = self.vmem.mark();
+// fn SpirvType* EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
+// 	sz mark = self.vmem.mark();
 
-	Id result @noinit;
-	Op* op = self.create_op(opcode, &result, ... operands);
+// 	Id result @noinit;
+// 	Op* op = self.create_op(opcode, &result, ... operands);
 
-	SpirvType*? existing_type = self.types[(HashOp)op];
-	if(try existing_type) {
-		self.vmem.reset(mark);
-		self.id_count -= 1;
-		return existing_type;
-	}
+// 	SpirvType*? existing_type = self.types[(HashOp)op];
+// 	if(try existing_type) {
+// 		self.vmem.reset(mark);
+// 		self.id_count -= 1;
+// 		return existing_type;
+// 	}
 
-	SpirvType* type = alloc::new(&self.vmem, SpirvType, {
-		.id = result,
-	});
+// 	SpirvType* type = alloc::new(&self.vmem, SpirvType, {
+// 		.id = result,
+// 	});
 
-	self.types[(HashOp)op] = type;
-	self.type_ops.add_op(op);
-	return type;
-}
+// 	self.types[(HashOp)op] = type;
+// 	self.type_ops.add_op(op);
+// 	return type;
+// }
 
-fn SpirvType* EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
-	return self.type_op_raw(opcode, operands);
-}
+// fn SpirvType* EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+// 	return self.type_op_raw(opcode, operands);
+// }
 
 fn Id EmissionContext.decoration_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.decoration_ops.op_raw(self, opcode, ...operands);
@@ -240,14 +243,14 @@ fn SpirvTypeInfo* type_info(EmissionContext* context, Type* type) {
 	switch(type.type_kind) {
 		case TYPE_STRUCT:
 			Decl* decl = type.decl;
-			if(try get_attribute(decl, SHADER_ROOT)) {
-				info.explicit_class = true;
-				info.root = true;
-				info.class = UNIFORM;	
-			}  else {
-				info.explicit_class = true;
-				info.class = INPUT;
-			}
+			// if(try get_attribute(decl, SHADER_ROOT)) {
+			// 	info.explicit_class = true;
+			// 	info.root = true;
+			// 	info.class = UNIFORM;	
+			// }  else {
+			// 	info.explicit_class = true;
+			// 	info.class = INPUT;
+			// }
 		default: break;
 	}
 
@@ -262,97 +265,97 @@ struct TypeContext {
 	}
 }
 
-fn SpirvType*? spirv_type(EmissionContext* context, Type* type, SourceLocId reference_loc, TypeContext type_context = {}) {
-	SpirvTypeInfo* info = type_info(context, type);
-	SpirvType* stype;
-	switch(type.type_kind) {
-		case TYPE_VOID: stype = context.type_op(TYPE_VOID);
-		case TYPE_BOOL: stype = context.type_op(TYPE_BOOL);
-		case TYPE_I8: stype = context.type_op(TYPE_INT, 8, 1);
-		case TYPE_I16: stype = context.type_op(TYPE_INT, 16, 1);
-		case TYPE_I32: stype = context.type_op(TYPE_INT, 32, 1);
-		case TYPE_I64: stype = context.type_op(TYPE_INT, 64, 1);
-		// case TYPE_I128: // unsupported for now.
-		case TYPE_U8: stype = context.type_op(TYPE_INT, 8, 0);
-		case TYPE_U16: stype = context.type_op(TYPE_INT, 16, 0);
-		case TYPE_U32: stype = context.type_op(TYPE_INT, 32, 0);
-		case TYPE_U64: stype = context.type_op(TYPE_INT, 64, 0);
-		// case TYPE_U128: // unsupported for now.
-		case TYPE_F16: stype = context.type_op(TYPE_FLOAT, 16);
-		// case TYPE_BF16: // unsupported for now.
-		case TYPE_F32: stype = context.type_op(TYPE_FLOAT, 32);
-		case TYPE_F64: stype = context.type_op(TYPE_FLOAT, 64);
-		// case TYPE_F128: // unsupported for now.
+// fn SpirvType*? spirv_type(EmissionContext* context, Type* type, SourceLocId reference_loc, TypeContext type_context = {}) {
+// 	SpirvTypeInfo* info = type_info(context, type);
+// 	SpirvType* stype;
+// 	switch(type.type_kind) {
+// 		case TYPE_VOID: stype = context.type_op(TYPE_VOID);
+// 		case TYPE_BOOL: stype = context.type_op(TYPE_BOOL);
+// 		case TYPE_I8: stype = context.type_op(TYPE_INT, 8, 1);
+// 		case TYPE_I16: stype = context.type_op(TYPE_INT, 16, 1);
+// 		case TYPE_I32: stype = context.type_op(TYPE_INT, 32, 1);
+// 		case TYPE_I64: stype = context.type_op(TYPE_INT, 64, 1);
+// 		// case TYPE_I128: // unsupported for now.
+// 		case TYPE_U8: stype = context.type_op(TYPE_INT, 8, 0);
+// 		case TYPE_U16: stype = context.type_op(TYPE_INT, 16, 0);
+// 		case TYPE_U32: stype = context.type_op(TYPE_INT, 32, 0);
+// 		case TYPE_U64: stype = context.type_op(TYPE_INT, 64, 0);
+// 		// case TYPE_U128: // unsupported for now.
+// 		case TYPE_F16: stype = context.type_op(TYPE_FLOAT, 16);
+// 		// case TYPE_BF16: // unsupported for now.
+// 		case TYPE_F32: stype = context.type_op(TYPE_FLOAT, 32);
+// 		case TYPE_F64: stype = context.type_op(TYPE_FLOAT, 64);
+// 		// case TYPE_F128: // unsupported for now.
 
-		case TYPE_POINTER:
-			Type* inner = type.pointer;
-			StorageClass class = FUNCTION;
-			if(type_context.uniform_ptr) {
-				class = UNIFORM;
-				type_context.uniform_ptr = false;
-			} else if(type_context.in_root) {
-				class = PHYSICAL_STORAGE_BUFFER;
-			}
+// 		case TYPE_POINTER:
+// 			Type* inner = type.pointer;
+// 			StorageClass class = FUNCTION;
+// 			if(type_context.uniform_ptr) {
+// 				class = UNIFORM;
+// 				type_context.uniform_ptr = false;
+// 			} else if(type_context.in_root) {
+// 				class = PHYSICAL_STORAGE_BUFFER;
+// 			}
 
-			SpirvType* inner_type = spirv_type(context, inner, reference_loc, type_context)!;
-			stype = context.type_op(TYPE_POINTER, class, inner_type.id);
-			stype.pointer = {
-				.inner = inner_type,
-				.class = class,
-			};
-		case TYPE_STRUCT: @pool() {
-			if(info.root) {
-				type_context.in_root = true;
-			}
+// 			SpirvType* inner_type = spirv_type(context, inner, reference_loc, type_context)!;
+// 			stype = context.type_op(TYPE_POINTER, class, inner_type.id);
+// 			stype.pointer = {
+// 				.inner = inner_type,
+// 				.class = class,
+// 			};
+// 		case TYPE_STRUCT: @pool() {
+// 			if(info.root) {
+// 				type_context.in_root = true;
+// 			}
 
-			StructDecl* struct_decl = &type.decl.strukt;
-			Decl*[] members = ast::vec(struct_decl.members);
+// 			StructDecl* struct_decl = &type.decl.strukt;
+// 			Decl*[] members = ast::vec(struct_decl.members);
 
-			SpirvType*[] member_types = alloc::alloc_array(&context.vmem, SpirvType*, members.len);
-			Id[] member_ids = mem::talloc_array(Id, members.len);
+// 			SpirvType*[] member_types = alloc::alloc_array(&context.vmem, SpirvType*, members.len);
+// 			Id[] member_ids = mem::talloc_array(Id, members.len);
 
-			foreach(sz i, Decl* member : members) {
-				SpirvType* member_type = spirv_type(context, member.type, member.loc, type_context)!;
-				member_types[i] = member_type;
-				member_ids[i] = member_type.id;
-			};
+// 			foreach(sz i, Decl* member : members) {
+// 				SpirvType* member_type = spirv_type(context, member.type, member.loc, type_context)!;
+// 				member_types[i] = member_type;
+// 				member_ids[i] = member_type.id;
+// 			};
 
-			SpirvType* struct_type = context.type_op_raw(TYPE_STRUCT, (uint[])member_ids);
-			if(!struct_type.type) {
-				if(info.root) {
-					context.decoration_op(DECORATE, struct_type.id, Decoration.BLOCK);
-				}
-				foreach(sz i, Decl* member : members) {
-					context.decoration_op(MEMBER_DECORATE, struct_type.id, (uint)i, Decoration.OFFSET, (uint)member.offset);
-				}
+// 			SpirvType* struct_type = context.type_op_raw(TYPE_STRUCT, (uint[])member_ids);
+// 			if(!struct_type.type) {
+// 				if(info.root) {
+// 					context.decoration_op(DECORATE, struct_type.id, Decoration.BLOCK);
+// 				}
+// 				foreach(sz i, Decl* member : members) {
+// 					context.decoration_op(MEMBER_DECORATE, struct_type.id, (uint)i, Decoration.OFFSET, (uint)member.offset);
+// 				}
 
-				struct_type.members = member_types;
-			}
+// 				struct_type.members = member_types;
+// 			}
 
-			stype = struct_type;
-		};
-		default:
-			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-	}
+// 			stype = struct_type;
+// 		};
+// 		default:
+// 			return err::error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
+// 	}
 
-	assert(stype);
-	if(stype.type == null) {
-		stype.type = type;
-	}
+// 	assert(stype);
+// 	if(stype.type == null) {
+// 		stype.type = type;
+// 	}
 
-	return stype;
-}
+// 	return stype;
+// }
 
-fn Id? EmissionContext.decl_id(&self, Decl* decl) {
-	assert(decl.decl_kind == DECL_VAR);
+// fn Id? EmissionContext.decl_id(&self, Decl* decl) {
+// 	assert(decl.decl_kind == DECL_VAR);
 
-	if(decl.backend_ref) {
-		return (Id)(uptr)decl.backend_ref;
-	}
+// 	if(decl.backend_ref) {
+// 		return (Id)(uptr)decl.backend_ref;
+// 	}
 
-	Type* type = decl.type;
-	return {};
-}
+// 	Type* type = decl.type;
+// 	return {};
+// }
 
 // fn Id? EmissionContext.type_id(&self, Type* type, SourceLocId reference_loc) {
 // 	switch(type.type_kind) {

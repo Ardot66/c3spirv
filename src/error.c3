@@ -1,4 +1,4 @@
-module ardot::c3spirv @private;
+module ardot::c3spirv::err;
 import ardot::c3c::ast, std::io;
 
 struct LineInfo {
@@ -14,7 +14,7 @@ fn void ast::File.get_lines(&self, sz offset, LineInfo[] dest, sz before = 0, sz
 	sz lines = before + after + 1;
 
 	sz start = offset;	
-	while(start >= 0) {
+	while(start > 0) {
 		if(contents[start] == '\n') {
 			if(before <= 0) {
 				start += 1;
@@ -52,11 +52,14 @@ fn void error_msg(SourceLocId loc_id, String error_kind, String format, args...)
 	SourceLoc* loc = ast::source_loc_ptr(loc_id);
 	ast::File* file = ast::gc().loaded_sources[loc.file_id];
 
-	LineInfo[4] lines;
-	file.get_lines(loc.offset, &lines, before: 3);
+	LineInfo[7] lines;
+	file.get_lines(loc.offset, &lines, before: 6);
 
 	io::eprintf("\n");
 	foreach(LineInfo line : lines) {
+		if(line.line == 0) {
+			continue;
+		}
 		io::eprintf("%6d: %s\n", line.line, line.content);
 	}
 
@@ -89,4 +92,3 @@ fn fault error(SourceLocId loc, String format, args...) {
 	error_msg(loc, "error", format, ...args);
 	return COMPILE_ERROR;
 }
-

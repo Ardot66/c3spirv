@@ -1,4 +1,4 @@
-module ardot::c3spirv @private;
+module ardot::c3spirv;
 
 constdef Opcode : ushort {
 	EXTENSION = 10,

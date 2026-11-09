@@ -5,24 +5,24 @@ struct ComputeBuiltin {
 	uint[<3>] local_invocation_id;
 }
 
-constdef ExecutionModel : inline uint @private {
+constdef ExecutionModel : inline uint {
 	VERTEX = 0,
 	FRAGMENT = 4,
 	COMPUTE = 5,
 }
 
-enum Attribute @private {
+enum Attribute {
 	SHADER,
 	SHADER_ROOT,
 	SHADER_BUILTIN,
 }
 
-enum ShaderBuiltin @private {
+enum ShaderBuiltin {
 	GET_ROOT,
 	GET_GLOBAL_INVOCATION_ID,
 }
 
-const String TAG @private = "c3spirv_builtin";
+const String TAG = "c3spirv_builtin";
 
 attrmacro @ComputeShader(uint[<3>] group_size) = @tag(TAG, {
 	Attribute.SHADER, 

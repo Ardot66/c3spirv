@@ -56,7 +56,7 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// In the case of this particular function, the parameter should just be a ComputeRoot pointer,
 	// nothing fancy. If it was a ** we would still be able to pass it, but there would need to
 	// be restrictions on the other side that the local variable can't be modified.
-	subfunc(root);
+	// subfunc(root);
 
 	// This should just create an OpVariable and load from the invocation_id, pretty simple.
 	uint id = invocation_id.x;
