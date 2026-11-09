@@ -116,7 +116,17 @@ fn uint[] str_literal(String string) {
 	return literal;
 }
 
-fn int? test() => 1;
+Type* bool_type;
+
+fn void find_builtin_types() {
+	Type*[] types = ast::vec(ast::gc().type);
+
+	foreach(Type* type : types) {
+		switch(type.type_kind) {
+			case TYPE_BOOL: bool_type = type;
+		}
+	}
+}
 
 fn int main(String[] args) @public
 {
@@ -133,6 +143,7 @@ fn int main(String[] args) @public
 	context.init(VMEM_SIZE);
 	defer context.free();
 
+	find_builtin_types();
 	if(catch sema::analyse(&context)) {
 		return 1;
 	}
