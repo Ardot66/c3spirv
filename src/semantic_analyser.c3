@@ -2,6 +2,8 @@ module ardot::c3spirv::sema;
 import ardot::c3c::ast, ardot::c3spirv;
 import std::collections::list;
 
+import std::io;
+
 fn SpirvType* create_type(EmissionContext* context, SpirvType* type) {
 	SpirvType*? existing = context.types[c3spirv::byte_view(type, SpirvType::size)];
 	if(try existing) {
@@ -30,11 +32,12 @@ fn SpirvType* create_type_struct(EmissionContext* context, Type* type, SpirvType
 	return create_type(context, &struct_type);
 }
 
-fn SpirvType* create_type_vector(EmissionContext* context, Type* type, SpirvType* member) {
+fn SpirvType* create_type_vector(EmissionContext* context, Type* type, SpirvType* member, int length) {
 	return create_type(context, &&{
 		.type = type,
 		.vector = {
 			.member = member,
+			.length = length,
 		}
 	});
 }
@@ -109,40 +112,6 @@ fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 	return NOT_FOUND~;
 }
 
-fn void? analyse_set_var(EmissionContext* context, SpirvDecl* variable, SpirvType* value, SourceLocId loc) {
-	if(variable.variable.type) {
-		if(variable.variable.type == value) {
-			return;
-		}
-
-		err::error(loc, "Cannot set variable, conflicting pointer types!");
-		return err::error_note(variable.declaration.loc, "The variable was declared here.")~;
-	}
-
-	if(variable.declaration.type != value.type) {
-		unreachable();
-	}
-
-	variable.variable.type = value;
-}
-
-fn void? analyse_declaration(EmissionContext* context, Decl* declaration) {
-	SpirvDecl* spirv_declaration = alloc::new(&context.vmem, SpirvDecl, {
-		.declaration = declaration,
-	});
-	declaration.backend_ref = spirv_declaration;
-
-	switch(declaration.decl_kind) {
-		case DECL_VAR:
-			VarDecl* variable = &declaration.var_field;
-			if(!variable.no_init) {
-				SpirvType* initializer = analyse_expression(context, variable.init_expr)!;
-				analyse_set_var(context, spirv_declaration, initializer, variable.init_expr.loc)!;
-			}
-		default: return err::error(declaration.loc, "Unsupported declaration kind: %s", ast::const_name(declaration.decl_kind))~;
-	}
-}
-
 fn SpirvType*? analyse_logical_type(EmissionContext* context, Type* type, SourceLocId loc) {
 	bool is_primitive = false;
 	is_primitive |= type.type_kind >= TYPE_NUM_FIRST && type.type_kind <= TYPE_NUM_LAST;
@@ -166,7 +135,7 @@ fn SpirvType*? analyse_logical_type(EmissionContext* context, Type* type, Source
 			return create_type_struct(context, type, member_types);
 		};
 		case TYPE_VECTOR:
-			return create_type_vector(context, type, analyse_logical_type(context, type.array.base, loc));
+			return create_type_vector(context, type, analyse_logical_type(context, type.array.base, loc), type.array.len);
 		default: return err::error(loc, "Unsupported logical memory type kind: %s", ast::const_name(type.type_kind))~;
 	}
 }
@@ -197,10 +166,16 @@ fn SpirvType*? analyse_physical_type(EmissionContext* context, Type* type, Sourc
 	}
 }
 
-fn SpirvType*? analyse_builtin_call(EmissionContext* context, Expr* expression, Expr*[] attribute_params) {
+fn SpirvType*? analyse_builtin_call(EmissionContext* context, SpirvExpr* spirv_expression, Expr*[] attribute_params) {
+	Expr* expression = spirv_expression.expression;
 	ExprCall* call = &expression.call_expr;
 	ShaderBuiltin builtin = (ShaderBuiltin)eval_const_enum(attribute_params[0]);
 	Type* rtype = expression.type;
+
+	spirv_expression.call = {
+		.is_builtin = true,
+		.builtin = builtin,
+	};
 
 	switch(builtin) {
 		case GET_ROOT:
@@ -217,7 +192,7 @@ fn SpirvType*? analyse_builtin_call(EmissionContext* context, Expr* expression, 
 	}
 }
 
-fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression) {
+fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression, bool allow_null = false) {
 	SpirvExpr* spirv_expression = alloc::new(&context.vmem, SpirvExpr, {
 		.expression = expression,
 	});
@@ -238,8 +213,8 @@ fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression) {
 			}
 		case EXPR_BINARY:
 			ExprBinary* binary = &expression.binary_expr;
-			analyse_expression(context, ast::expr_ptr(binary.left))!;
-			analyse_expression(context, ast::expr_ptr(binary.right))!;
+			analyse_expression(context, ast::expr_ptr(binary.left), true)!;
+			analyse_expression(context, ast::expr_ptr(binary.right), true)!;
 			type = create_type_primitive(context, c3spirv::bool_type);
 		case EXPR_CALL:
 			ExprCall* call = &expression.call_expr;
@@ -247,7 +222,7 @@ fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression) {
 
 			Expr*[]? builtin_params = get_attribute(declaration, SHADER_BUILTIN);
 			if(try builtin_params) {
-				type = analyse_builtin_call(context, expression, builtin_params)!;
+				type = analyse_builtin_call(context, spirv_expression, builtin_params)!;
 			} else {
 				return err::error(expression.loc, "Non-builtin calls are not currently supported.")~;
 			}
@@ -292,10 +267,51 @@ fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression) {
 		default: return err::error(expression.loc, "Unsupported expression kind: %s", ast::const_name(expression.expr_kind))~;
 	}
 
-	assert(type);
+	if(!allow_null) {
+		assert(type);
+	}
 
 	spirv_expression.type = type;
 	return type;
+}
+
+fn bool can_write_variable(SpirvType* type) => type.type.type_kind != TYPE_POINTER;
+fn void? analyse_set_var(EmissionContext* context, SpirvDecl* variable, SpirvType* value, SourceLocId loc) {
+	if(variable.variable.type) {
+		if(variable.variable.type != value) {
+			err::error(loc, "Cannot set variable, conflicting pointer types!");
+			return err::error_note(variable.declaration.loc, "The variable was declared here.")~;
+		} else if(!variable.variable.writeable) {
+			err::error(loc, "Cannot set the value of a pointer variable more than once.");
+			return err::error_note(variable.declaration.loc, "The variable was declared here.")~;
+		}
+
+		return;
+	}
+
+	if(variable.declaration.type != value.type) {
+		unreachable();
+	}
+
+	variable.variable.type = value;
+	variable.variable.writeable = can_write_variable(value);
+}
+
+fn void? analyse_declaration(EmissionContext* context, Decl* declaration) {
+	SpirvDecl* spirv_declaration = alloc::new(&context.vmem, SpirvDecl, {
+		.declaration = declaration,
+	});
+	declaration.backend_ref = spirv_declaration;
+
+	switch(declaration.decl_kind) {
+		case DECL_VAR:
+			VarDecl* variable = &declaration.var_field;
+			if(variable.init_expr) {
+				SpirvType* initializer = analyse_expression(context, variable.init_expr)!;
+				analyse_set_var(context, spirv_declaration, initializer, variable.init_expr.loc)!;
+			}
+		default: return err::error(declaration.loc, "Unsupported declaration kind: %s", ast::const_name(declaration.decl_kind))~;
+	}
 }
 
 fn void? analyse_statement(EmissionContext* context, Ast* statement) {
@@ -325,7 +341,9 @@ fn void? analyse_entry_point(EmissionContext* context, Decl* decl) {
 		return;
 	}
 
-	SpirvEntryPoint* entry_point = alloc::new(&context.vmem, SpirvEntryPoint);
+	SpirvEntryPoint* entry_point = alloc::new(&context.vmem, SpirvEntryPoint, {
+		.declaration = decl,
+	});
 	context.entry_points.push(entry_point);
 
 	FuncDecl* func_decl = &decl.func_decl;

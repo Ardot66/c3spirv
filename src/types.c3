@@ -26,6 +26,7 @@ struct SpirvType {
 		}
 		struct vector {
 			SpirvType* member;
+			int length;
 		}
 	}
 }
@@ -34,7 +35,10 @@ struct SpirvDecl {
 	Decl* declaration;
 	union {
 		struct variable {
+			bool writeable;
 			SpirvType* type;
+			Id pointer_type_id;
+			Id id;
 		}
 	}
 }
@@ -42,6 +46,12 @@ struct SpirvDecl {
 struct SpirvExpr {
 	Expr* expression;
 	SpirvType* type;
+	union {
+		struct call {
+			bool is_builtin;
+			ShaderBuiltin builtin;
+		}
+	}
 }
 
 struct OpStream {
@@ -64,13 +74,17 @@ struct EmissionContext {
 	uint id_count;
 	HashMap{char[], SpirvType*} types;
 	HashMap{Expr*, SpirvExpr*} spirv_expressions;
-	HashMap{HashOp, Id} type_op_map;
+	HashMap{HashOp, Id} op_map;
 	// HashMap{HashOp, Id} global_ids;
 
 	OpStream init_ops;
 	OpStream decoration_ops;
 	OpStream type_ops;
 	OpStream func_ops;
+
+	// Function specific stuff, managed by emit_function and emit_entry_point.
+	OpStream func_var_ops;
+	List{Id} func_interfaces;
 }
 
 macro char[] byte_view(void* ptr, sz size) => ((char*)ptr)[..size - 1];
@@ -81,6 +95,7 @@ fn void EmissionContext.init(&self, sz vmem_size) {
 	self.vmem.init(vmem_size)!!;
 	self.entry_points.init(&self.vmem);
 	self.types.init(&self.vmem);
+	self.func_interfaces.init(&self.vmem);
 	// self.global_ids.init(&self.vmem);
 	self.id_count = 1;
 }

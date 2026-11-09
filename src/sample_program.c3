@@ -113,7 +113,7 @@ fn void emit_sample_program() {
 
 	// Mark the function as the entry point "main". root_variable and invocation_id need to 
 	// be referenced here, as they are the external inputs for this entry point.
-	context.init_ops.op_raw(&context, ENTRY_POINT, {ExecutionModel.COMPUTE, function}, str_literal("main"), {root_variable, invocation_id});
+	context.init_ops.op_raw(&context, ENTRY_POINT, {ExecutionModel.COMPUTE, function}, codegen::tstr_literal("main"), {root_variable, invocation_id});
 	// Compute shaders need to have their LOCAL_SIZE specified. The LOCAL_SIZE is the size
 	// of each workgroups that will be dispatched. 
 	// (Think of it like a cube of workers with the given dimentions.)
