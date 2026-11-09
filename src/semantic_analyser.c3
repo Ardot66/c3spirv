@@ -2,49 +2,6 @@ module ardot::c3spirv::sema;
 import ardot::c3c::ast, ardot::c3spirv;
 import std::collections::list;
 
-import std::io;
-
-struct SpirvEntryPoint {
-	Decl* declaration;
-	ExecutionModel model;
-	union {
-		struct compute {
-			uint[<3>] group_size;
-		}
-	}
-}
-
-struct SpirvType {
-	Id id;
-	Type* type;
-	union {
-		struct pointer {
-			SpirvType* inner;
-			StorageClass class;
-		}
-		struct structure {
-			SpirvType*[] members;
-		}
-		struct vector {
-			SpirvType* member;
-		}
-	}
-}
-
-struct SpirvDecl {
-	Decl* declaration;
-	union {
-		struct variable {
-			SpirvType* type;
-		}
-	}
-}
-
-struct SpirvExpr {
-	Expr* expression;
-	SpirvType* type;
-}
-
 fn SpirvType* create_type(EmissionContext* context, SpirvType* type) {
 	SpirvType*? existing = context.types[c3spirv::byte_view(type, SpirvType::size)];
 	if(try existing) {
@@ -369,10 +326,10 @@ fn void? analyse_entry_point(EmissionContext* context, Decl* decl) {
 	}
 
 	SpirvEntryPoint* entry_point = alloc::new(&context.vmem, SpirvEntryPoint);
+	context.entry_points.push(entry_point);
 
 	FuncDecl* func_decl = &decl.func_decl;
 	Signature* signature = &func_decl.signature;
-	Decl*[] params = ast::vec(signature.params);
 
 	TypeInfo* rtype_info = ast::type_info_ptr(signature.rtype);
 	if(rtype_info.type.type_kind != TYPE_VOID) {

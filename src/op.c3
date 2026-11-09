@@ -1,35 +1,6 @@
 module ardot::c3spirv;
 import ardot::c3c::ast, std::io, std::collections::map, std::collections::list;
 
-struct OpStream {
-	Op* first_op;
-	Op* last_op;
-}
-
-struct Op {
-	Op* next;
-	uint[*] operands;
-}
-
-// Needed so that Op* works correctly in hashmaps.
-typedef HashOp = inline Op*;
-
-struct EmissionContext {
-	List{SpirvEntryPoint} entry_points;
-
-	Vmem vmem;
-	uint id_count;
-	HashMap{char[], SpirvType*} types;
-	HashMap{Expr*, SpirvExpr*} spirv_expressions;
-	// HashMap{HashOp, SpirvType*} types;
-	// HashMap{HashOp, Id} global_ids;
-
-	OpStream init_ops;
-	OpStream decoration_ops;
-	OpStream type_ops;
-	OpStream func_ops;
-}
-
 fn uint Expr.hash(Expr* self) => void*.hash(self);
 
 fn uint Op.opsize(&self) => self.operands[0] >> 16;
@@ -178,31 +149,27 @@ fn Id EmissionContext.init_op(&self, Opcode opcode, uint... operands) {
 	return self.init_ops.op(self, opcode, ...operands);
 }
 
-// fn SpirvType* EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
-// 	sz mark = self.vmem.mark();
+fn Id EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
+	sz mark = self.vmem.mark();
 
-// 	Id result @noinit;
-// 	Op* op = self.create_op(opcode, &result, ... operands);
+	Id result @noinit;
+	Op* op = self.create_op(opcode, &result, ... operands);
 
-// 	SpirvType*? existing_type = self.types[(HashOp)op];
-// 	if(try existing_type) {
-// 		self.vmem.reset(mark);
-// 		self.id_count -= 1;
-// 		return existing_type;
-// 	}
+	Id? existing_type = self.type_op_map[(HashOp)op];
+	if(try existing_type) {
+		self.vmem.reset(mark);
+		self.id_count -= 1;
+		return existing_type;
+	}
 
-// 	SpirvType* type = alloc::new(&self.vmem, SpirvType, {
-// 		.id = result,
-// 	});
+	self.type_op_map[(HashOp)op] = result;
+	self.type_ops.add_op(op);
+	return result;
+}
 
-// 	self.types[(HashOp)op] = type;
-// 	self.type_ops.add_op(op);
-// 	return type;
-// }
-
-// fn SpirvType* EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
-// 	return self.type_op_raw(opcode, operands);
-// }
+fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+	return self.type_op_raw(opcode, operands);
+}
 
 fn Id EmissionContext.decoration_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.decoration_ops.op_raw(self, opcode, ...operands);
@@ -218,51 +185,6 @@ fn Id EmissionContext.func_op_raw(&self, Opcode opcode, uint[]... operands) {
 
 fn Id EmissionContext.func_op(&self, Opcode opcode, uint... operands) {
 	return self.func_ops.op(self, opcode, ...operands);
-}
-
-struct SpirvTypeInfo {
-	bitstruct : uint {
-		bool explicit_class;
-		bool builtin;
-		bool root;
-	}
-	StorageClass class;
-}
-
-struct SpirvDeclInfo {
-	SpirvType* type;
-	Id variable;
-}
-
-fn SpirvTypeInfo* type_info(EmissionContext* context, Type* type) {
-	if(type.backend_type) {
-		return type.backend_type;
-	}
-
-	SpirvTypeInfo* info = alloc::new(&context.vmem, SpirvTypeInfo);
-	switch(type.type_kind) {
-		case TYPE_STRUCT:
-			Decl* decl = type.decl;
-			// if(try get_attribute(decl, SHADER_ROOT)) {
-			// 	info.explicit_class = true;
-			// 	info.root = true;
-			// 	info.class = UNIFORM;	
-			// }  else {
-			// 	info.explicit_class = true;
-			// 	info.class = INPUT;
-			// }
-		default: break;
-	}
-
-	type.backend_type = info;
-	return info;
-}
-
-struct TypeContext {
-	bitstruct : uint {
-		bool uniform_ptr;
-		bool in_root;
-	}
 }
 
 // fn SpirvType*? spirv_type(EmissionContext* context, Type* type, SourceLocId reference_loc, TypeContext type_context = {}) {
@@ -356,71 +278,3 @@ struct TypeContext {
 // 	Type* type = decl.type;
 // 	return {};
 // }
-
-// fn Id? EmissionContext.type_id(&self, Type* type, SourceLocId reference_loc) {
-// 	switch(type.type_kind) {
-// 		case TYPE_VOID: return self.type_op(TYPE_VOID);
-// 		case TYPE_BOOL: return self.type_op(TYPE_BOOL);
-// 		case TYPE_I8: return self.type_op(TYPE_INT, 8, 1);
-// 		case TYPE_I16: return self.type_op(TYPE_INT, 16, 1);
-// 		case TYPE_I32: return self.type_op(TYPE_INT, 32, 1);
-// 		case TYPE_I64: return self.type_op(TYPE_INT, 64, 1);
-// 		// case TYPE_I128: // unsupported for now.
-// 		case TYPE_U8: return self.type_op(TYPE_INT, 8, 0);
-// 		case TYPE_U16: return self.type_op(TYPE_INT, 16, 0);
-// 		case TYPE_U32: return self.type_op(TYPE_INT, 32, 0);
-// 		case TYPE_U64: return self.type_op(TYPE_INT, 64, 0);
-// 		// case TYPE_U128: // unsupported for now.
-// 		case TYPE_F16: return self.type_op(TYPE_FLOAT, 16);
-// 		// case TYPE_BF16: // unsupported for now.
-// 		case TYPE_F32: return self.type_op(TYPE_FLOAT, 32);
-// 		case TYPE_F64: return self.type_op(TYPE_FLOAT, 64);
-// 		// case TYPE_F128: // unsupported for now.
-// 		// case TYPE_ANY: // runtime reflection in shaders is probably unnecessary.
-// 		// case TYPE_TYPEID:
-
-// 		case TYPE_FUNC_PTR:
-// 		case TYPE_POINTER:
-// 			nextcase default;
-// 			// Type* inner = type.pointer;
-// 			// Id inner_id = self.get_type_id(inner, reference_loc)!;
-// 			// self.type_ops.op(self, TYPE_UNTYPED_POINTER, new_id, StorageClass.PHYSICAL_STORAGE_BUFFER);
-// 		case TYPE_TYPEDEF:
-// 		case TYPE_CONSTSET:
-// 		case TYPE_ENUM:
-// 			nextcase default;
-// 		case TYPE_FUNC_RAW: @pool() {
-// 			TypeFunction *func = &type.function;
-
-// 			Decl*[] params = ast::vec(func.signature.params);
-// 			Id[] param_ids = mem::talloc_array(Id, params.len);
-
-// 			for(sz i = 0; i < params.len; i++) {
-// 				param_ids[i] = self.type_id(params[i].type, params[i].loc)!;
-// 			}
-
-// 			TypeInfo* ret_type = ast::type_info_ptr(func.signature.rtype);
-// 			Id ret_id = self.type_id(ret_type.type, ret_type.loc)!;
-// 			// self.type_ops.op_raw(self, TYPE_FUNCTION, {new_id, ret_id}, (uint[])param_ids);
-// 		};
-// 		case TYPE_STRUCT:
-// 		case TYPE_UNION:
-// 		case TYPE_BITSTRUCT:
-// 		case TYPE_ALIAS:
-// 		case TYPE_UNTYPEDLIST:
-// 		case TYPE_SLICE:
-// 		case TYPE_ARRAY:
-// 		case TYPE_FLEXIBLE_ARRAY:
-// 		case TYPE_INFERRED_ARRAY:
-// 		case TYPE_VECTOR:
-// 		case TYPE_SIMD_VECTOR:
-// 		case TYPE_INFERRED_VECTOR:
-// 		case TYPE_OPTIONAL:
-// 			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-// 		default:
-// 			return error(reference_loc, "Unsupported type: %s", ast::const_name(type.type_kind))~;
-// 	}
-
-// 	unreachable();
-// }
-

@@ -2,8 +2,6 @@ module ardot::c3spirv;
 import ardot::c3c::ast;
 import std::io, std::collections::map;
 
-typedef Id = inline uint;
-
 // fn void? emit_declaration(EmissionContext* context, Decl* declaration) {
 // 	switch(declaration.decl_kind) {
 // 		case DECL_VAR:
