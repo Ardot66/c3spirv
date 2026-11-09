@@ -73,3 +73,19 @@ struct EmissionContext {
 	OpStream func_ops;
 }
 
+macro char[] byte_view(void* ptr, sz size) => ((char*)ptr)[..size - 1];
+
+fn uint Expr.hash(Expr* self) => void*.hash(self);
+
+fn void EmissionContext.init(&self, sz vmem_size) {
+	self.vmem.init(vmem_size)!!;
+	self.entry_points.init(&self.vmem);
+	self.types.init(&self.vmem);
+	// self.global_ids.init(&self.vmem);
+	self.id_count = 1;
+}
+
+fn void EmissionContext.free(&self) {
+	self.vmem.free();
+}
+

@@ -1,7 +1,5 @@
-module ardot::c3spirv;
+module ardot::c3spirv::codegen;
 import ardot::c3c::ast, std::io, std::collections::map, std::collections::list;
-
-fn uint Expr.hash(Expr* self) => void*.hash(self);
 
 fn uint Op.opsize(&self) => self.operands[0] >> 16;
 fn Opcode Op.opcode(&self) => (Opcode)(self.operands[0] & 0xFFFF);
@@ -46,25 +44,11 @@ fn bool Op.equals(&a, Op* b) {
 fn uint HashOp.hash(self) => Op.hash(self);
 fn bool HashOp.equals(a, HashOp b) @operator(==) => Op.equals(a, b);
 
-fn void EmissionContext.init(&self, sz vmem_size) {
-	self.vmem.init(vmem_size)!!;
-	self.entry_points.init(&self.vmem);
-	self.types.init(&self.vmem);
-	// self.global_ids.init(&self.vmem);
-	self.id_count = 1;
-}
-
-fn void EmissionContext.free(&self) {
-	self.vmem.free();
-}
-
 fn Id EmissionContext.generate_id(&self) {
 
 	defer self.id_count += 1;
 	return (Id)self.id_count;
 }
-
-macro char[] byte_view(void* ptr, sz size) => ((char*)ptr)[..size - 1];
 
 fn void? EmissionContext.write(&self, OutStream stream) {
 	uint[5] header = {
@@ -86,7 +70,7 @@ fn void? OpStream.write(&self, OutStream stream) {
 	Op* op = self.first_op;
 	while(op) {
 		uint opsize = op.operands[0] >> 16;
-		io::write_all(stream, byte_view(&op.operands, opsize * uint::size))!;
+		io::write_all(stream, c3spirv::byte_view(&op.operands, opsize * uint::size))!;
 		op = op.next;
 	}
 }
