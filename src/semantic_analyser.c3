@@ -192,37 +192,63 @@ fn SpirvType*? analyse_builtin_call(EmissionContext* context, SpirvExpr* spirv_e
 	}
 }
 
-fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression, bool allow_null = false) {
+fn ExprType expr_type(SpirvType* value) {
+	return {value, value};
+}
+
+fn ExprType expr_deref(ExprType type) {
+	return {
+		.real = type.real.pointer.inner,
+		.ref = type.ref.pointer.inner,
+	};
+}
+
+fn ExprType expr_addr(ExprType type) {
+	return {
+		.real = type.real,
+		.ref = type.real,
+	};
+}
+
+fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bool allow_null = false) {
 	SpirvExpr* spirv_expression = alloc::new(&context.vmem, SpirvExpr, {
 		.expression = expression,
 	});
 	context.spirv_expressions[expression] = spirv_expression;
 
-	SpirvType* type;
+	ExprType type;
 	switch(expression.expr_kind) {
 		case EXPR_ACCESS_RESOLVED:
 			ExprResolvedAccess* resolved = &expression.access_resolved_expr;
-			SpirvType* parent = analyse_expression(context, resolved.parent)!;
-			assert(parent.type.type_kind == TYPE_STRUCT);
+			SpirvExpr* parent = analyse_expression(context, resolved.parent)!;
 
-			foreach(sz i, Decl* member : ast::vec(parent.type.decl.strukt.members)) {
+			sz member_index;
+			foreach(sz i, Decl* member : ast::vec(parent.type.ref.type.decl.strukt.members)) {
 				if(member == resolved.ref) {
-					type = parent.structure.members[i];
+					member_index = i;
 					break;
 				}
+			}
+
+			SpirvType* member_type = parent.type.ref.structure.members[member_index];
+			type.ref = member_type;
+			if(parent.type.ref != parent.type.real) {
+				type.real = create_type_pointer(context, null, parent.type.real.pointer.class, member_type);
+			} else {
+				type.real = member_type;
 			}
 		case EXPR_BINARY:
 			ExprBinary* binary = &expression.binary_expr;
 			analyse_expression(context, ast::expr_ptr(binary.left), true)!;
 			analyse_expression(context, ast::expr_ptr(binary.right), true)!;
-			type = create_type_primitive(context, c3spirv::bool_type);
+			type = expr_type(create_type_primitive(context, c3spirv::bool_type));
 		case EXPR_CALL:
 			ExprCall* call = &expression.call_expr;
 			Decl* declaration = ast::decl_ptr(call.func_ref);
 
 			Expr*[]? builtin_params = get_attribute(declaration, SHADER_BUILTIN);
 			if(try builtin_params) {
-				type = analyse_builtin_call(context, spirv_expression, builtin_params)!;
+				type = expr_type(analyse_builtin_call(context, spirv_expression, builtin_params))!;
 			} else {
 				return err::error(expression.loc, "Non-builtin calls are not currently supported.")~;
 			}
@@ -231,48 +257,56 @@ fn SpirvType*? analyse_expression(EmissionContext* context, Expr* expression, bo
 			foreach(cond : expressions[..^2]) {
 				analyse_expression(context, cond)!;
 			}
-			type = analyse_expression(context, expressions[^1])!;
+			type = analyse_expression(context, expressions[^1]).type!;
 		case EXPR_CONST:
-			type = analyse_logical_type(context, expression.type, expression.loc)!;
+			type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
 		case EXPR_EXT_TRUNC:
 			ExprExtTrunc* trunc = &expression.ext_trunc_expr;
 			analyse_expression(context, trunc.inner)!;
-			type = analyse_logical_type(context, expression.type, expression.loc)!;
+			type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
 		case EXPR_IDENTIFIER:
-			Decl* ident = expression.ident_expr;
-			type = ((SpirvDecl *)ident.backend_ref).variable.type;
+			SpirvDecl* declaration = expression.ident_expr.backend_ref;
+			type = {
+				.real = declaration.variable.real_type,
+				.ref = declaration.variable.type
+			};
 		case EXPR_SUBSCRIPT:
 			ExprSubscript* subscript = &expression.subscript_expr;
 
+			SpirvExpr* expr = analyse_expression(context, ast::expr_ptr(subscript.expr))!;
 			analyse_expression(context, ast::expr_ptr(subscript.index.expr))!;
-			SpirvType* left = analyse_expression(context, ast::expr_ptr(subscript.expr))!;
 
-			switch(left.type.type_kind) {
-				case TYPE_VECTOR: return left.vector.member;
-				case TYPE_POINTER: return left.pointer.inner;
-				default: return err::error(expression.loc, "Unsupported subscript kind: %s", ast::const_name(left.type.type_kind))~;
+			SpirvType* result;
+			switch(expr.type.ref.type.type_kind) {
+				case TYPE_VECTOR: type = expr_type(expr.type.ref.vector.member);
+				case TYPE_POINTER: type = expr_type(expr.type.ref.pointer.inner);
+				default: return err::error(expression.loc, "Unsupported subscript type kind: %s", ast::const_name(expr.type.ref.type.type_kind))~;
+			}
+
+			if(expr.type.ref != expr.type.real) {
+				type.real = create_type_pointer(context, null, expr.type.real.pointer.class, type.ref);
+			} else {
+				type.real = type.ref;
 			}
 		case EXPR_UNARY:
 			ExprUnary* unary = &expression.unary_expr;
-			SpirvType* inner = analyse_expression(context, unary.expr)!;
+			SpirvExpr* inner = analyse_expression(context, unary.expr)!;
 			switch(unary.operator) {
 				case UNARYOP_DEREF:
-					type = inner.pointer.inner;
-				case UNARYOP_ADDR:
-					return err::error(expression.loc, "Addr unary not supported.")~;
-				case UNARYOP_TADDR:
-					return err::error(expression.loc, "Taddr unary not supported.")~;
-				default: type = inner;
+					type = expr_deref(inner.type);
+				default: 
+					return err::error(expression.loc, "Unsupported unary kind: %s", ast::const_name(unary.operator))~;
 			}
 		default: return err::error(expression.loc, "Unsupported expression kind: %s", ast::const_name(expression.expr_kind))~;
 	}
 
 	if(!allow_null) {
-		assert(type);
+		assert(type.real);
+		assert(type.ref);
 	}
 
 	spirv_expression.type = type;
-	return type;
+	return spirv_expression;
 }
 
 fn bool can_write_variable(SpirvType* type) => type.type.type_kind != TYPE_POINTER;
@@ -294,7 +328,14 @@ fn void? analyse_set_var(EmissionContext* context, SpirvDecl* variable, SpirvTyp
 	}
 
 	variable.variable.type = value;
-	variable.variable.writeable = can_write_variable(value);
+	bool writeable = can_write_variable(value);
+	variable.variable.writeable = writeable;
+
+	if(writeable) {
+		variable.variable.real_type = create_type_pointer(context, null, StorageClass.FUNCTION, value);
+	} else {
+		variable.variable.real_type = value;
+	}
 }
 
 fn void? analyse_declaration(EmissionContext* context, Decl* declaration) {
@@ -307,7 +348,7 @@ fn void? analyse_declaration(EmissionContext* context, Decl* declaration) {
 		case DECL_VAR:
 			VarDecl* variable = &declaration.var_field;
 			if(variable.init_expr) {
-				SpirvType* initializer = analyse_expression(context, variable.init_expr)!;
+				SpirvType* initializer = analyse_expression(context, variable.init_expr).type.ref!;
 				analyse_set_var(context, spirv_declaration, initializer, variable.init_expr.loc)!;
 			}
 		default: return err::error(declaration.loc, "Unsupported declaration kind: %s", ast::const_name(declaration.decl_kind))~;

@@ -37,15 +37,23 @@ struct SpirvDecl {
 		struct variable {
 			bool writeable;
 			SpirvType* type;
-			Id pointer_type_id;
+			SpirvType* real_type;
 			Id id;
+			Id pointer_type_id;
 		}
 	}
 }
 
+struct ExprType {
+	SpirvType* real;
+	// The type being pointed at, it is the same as the real type if there is no reference.
+	SpirvType* ref;
+}
+
 struct SpirvExpr {
 	Expr* expression;
-	SpirvType* type;
+	ExprType type;
+	Id id;
 	union {
 		struct call {
 			bool is_builtin;

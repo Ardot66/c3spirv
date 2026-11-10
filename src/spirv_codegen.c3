@@ -3,9 +3,17 @@ import ardot::c3spirv, ardot::c3c::ast;
 
 import std::io;
 
+fn Id pointer_type_id(EmissionContext* context, SpirvType* type) {
+	SpirvType* inner = type.pointer.inner;
+	Id inner_id = type_id(context, inner);
+	return context.type_op(TYPE_POINTER, type.pointer.class, inner_id);
+}
+
 fn Id type_id(EmissionContext* context, SpirvType* type) {
 	if(type.id) {
 		return type.id;
+	} else if(!type.type) {
+		return pointer_type_id(context, type);
 	}
 
 	Id id;
@@ -15,12 +23,14 @@ fn Id type_id(EmissionContext* context, SpirvType* type) {
 		case TYPE_I8: id = context.type_op(TYPE_INT, 8, 1);
 		case TYPE_I16: id = context.type_op(TYPE_INT, 16, 1);
 		case TYPE_I32: id = context.type_op(TYPE_INT, 32, 1);
-		case TYPE_I64: id = context.type_op(TYPE_INT, 64, 1);
+		case TYPE_I64: id = context.type_op(TYPE_INT, 32, 1);
+		// case TYPE_I64: id = context.type_op(TYPE_INT, 64, 1); // Limiting 64 bit constants for now.
 		// case TYPE_I128: // unsupported for now.
 		case TYPE_U8: id = context.type_op(TYPE_INT, 8, 0);
 		case TYPE_U16: id = context.type_op(TYPE_INT, 16, 0);
 		case TYPE_U32: id = context.type_op(TYPE_INT, 32, 0);
-		case TYPE_U64: id = context.type_op(TYPE_INT, 64, 0);
+		case TYPE_U64: id = context.type_op(TYPE_INT, 32, 0);
+		// case TYPE_U64: id = context.type_op(TYPE_INT, 64, 0); // Limiting 64 bit constants for now.
 		// case TYPE_U128: // unsupported for now.
 		case TYPE_F16: id = context.type_op(TYPE_FLOAT, 16);
 		// case TYPE_BF16: // unsupported for now.
@@ -28,10 +38,7 @@ fn Id type_id(EmissionContext* context, SpirvType* type) {
 		case TYPE_F64: id = context.type_op(TYPE_FLOAT, 64);
 		// case TYPE_F128: // unsupported for now.
 
-		case TYPE_POINTER:
-			SpirvType* inner = type.pointer.inner;
-			Id inner_id = type_id(context, inner);
-			id = context.type_op(TYPE_POINTER, type.pointer.class, inner_id);
+		case TYPE_POINTER: id = pointer_type_id(context, type);
 		case TYPE_STRUCT: @pool() {
 			StructDecl* struct_decl = &type.type.decl.strukt;
 
@@ -67,7 +74,7 @@ fn void add_func_interface(EmissionContext* context, Id interface_id) {
 fn Id emit_builtin_call(EmissionContext* context, SpirvExpr* spirv_expr) {
 	ShaderBuiltin builtin = spirv_expr.call.builtin;
 	Expr* expression = spirv_expr.expression;
-	Id expr_type = type_id(context, spirv_expr.type);
+	Id expr_type = type_id(context, spirv_expr.type.ref);
 
 	Id id;
 	switch(builtin) {
@@ -89,7 +96,16 @@ fn Id emit_builtin_call(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return id;
 }
 
-fn Id emit_expression(EmissionContext* context, Expr* expression) {
+// fn Id emit_variable_load(EmissionContext* context, SpirvDecl* spirv_decl) {
+// 	assert(spirv_decl.declaration.decl_kind == DECL_VAR);
+// 	if(spirv_decl.variable.writeable) {
+// 		return context.func_op(LOAD, type_id(context, spirv_decl.variable.type), spirv_decl.variable.id);
+// 	} else {
+// 		return spirv_decl.variable.id;
+// 	}
+// }
+
+fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 	SpirvExpr* spirv_expr = context.spirv_expressions.get(expression)!!;
 
 	Id id;
@@ -105,19 +121,58 @@ fn Id emit_expression(EmissionContext* context, Expr* expression) {
 		// 		emit_expression(context, cond)!;
 		// 	}
 		// 	return {};
+		case EXPR_CONST:
+			ExprConst* const_expr = &expression.const_expr;
+			Id type = type_id(context, spirv_expr.type.ref);
+			switch(const_expr.const_kind) {
+				case CONST_FLOAT:
+					id = context.type_op(CONSTANT, type, bitcast((float)const_expr.fxx.f, uint));
+				case CONST_INTEGER:
+					id = context.type_op(CONSTANT, type, (uint)const_expr.ixx.i.low);
+				case CONST_BOOL:
+					Opcode op = const_expr.b ? CONSTANT_TRUE : CONSTANT_FALSE;
+					id = context.type_op(op);
+				default: unreachable("Unsupported codegen const %s", ast::const_name(const_expr.const_kind));
+			}
+
 		// case EXPR_BINARY:
 		// 	ExprBinary* binary = &expression.binary_expr;
 		// 	emit_expression(context, ast::expr_ptr(binary.left))!;
 		// 	emit_expression(context, ast::expr_ptr(binary.right))!;
 		// 	return {};
-		// case EXPR_IDENTIFIER:
-		// 	Decl* ident = expression.ident_expr;
-		// 	return {};
+		case EXPR_IDENTIFIER:
+			SpirvDecl* spirv_decl = expression.ident_expr.backend_ref;
+			id = spirv_decl.variable.id;
+		case EXPR_SUBSCRIPT:
+			ExprSubscript* subscript = &expression.subscript_expr;
+
+			SpirvExpr* left = emit_expression(context, ast::expr_ptr(subscript.expr));
+			SpirvExpr* right = emit_expression(context, ast::expr_ptr(subscript.index.expr));
+
+			switch(left.type.ref.type.type_kind) {
+				case TYPE_VECTOR:
+					if(left.type.ref != left.type.real) {
+						id = context.func_op(ACCESS_CHAIN, type_id(context, spirv_expr.type.real), left.id, right.id);
+					} else {
+						id = context.func_op(VECTOR_EXTRACT_DYNAMIC, type_id(context, spirv_expr.type.real), left.id, right.id);
+					}
+				// case TYPE_POINTER: return left.pointer.inner;
+				default: unreachable("Unsupported subscript kind: %s", ast::const_name(left.type.ref.type.type_kind));
+			}
 		default: unreachable("Unsupported codegen expression: %s", ast::const_name(expression.expr_kind));
 	}
 
 	assert(id);
-	return id;
+	spirv_expr.id = id;
+	return spirv_expr;
+}
+
+fn Id emit_expr_value(EmissionContext* context, SpirvExpr* expression) {
+	if(expression.type.ref != expression.type.real) {
+		return context.func_op(LOAD, type_id(context, expression.type.ref), expression.id);
+	} else {
+		return expression.id;
+	}
 }
 
 fn void emit_declaration(EmissionContext* context, Decl* declaration) {
@@ -130,7 +185,7 @@ fn void emit_declaration(EmissionContext* context, Decl* declaration) {
 			Id type = type_id(context, spirv_decl.variable.type);
 			Id initializer;
 			if(var_decl.init_expr) {
-				initializer = emit_expression(context, var_decl.init_expr);
+				initializer = emit_expr_value(context, emit_expression(context, var_decl.init_expr));
 			}
 
 			if(!spirv_decl.variable.writeable) {

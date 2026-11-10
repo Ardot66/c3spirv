@@ -59,7 +59,7 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// subfunc(root);
 
 	// This should just create an OpVariable and load from the invocation_id, pretty simple.
-	// uint id = invocation_id.x;
+	uint id = invocation_id.x;
 
 	// // Branches are a little complex, but I think it should be possible to represent them well.
 	// // Will need to do some more experimentation here.
