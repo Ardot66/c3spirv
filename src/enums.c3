@@ -38,7 +38,22 @@ constdef Opcode : ushort {
 	BITCAST = 124,
 	I_MUL = 132,
 	F_MUL = 133,
+	I_EQUAL = 170,
+	I_NOT_EQUAL = 171,
+	U_GREATER_THAN = 172,
+	S_GREATER_THAN = 173,
+	U_GREATER_THAN_EQUAL = 174,
+	S_GREATER_THAN_EQUAL = 175,
+	U_LESS_THAN = 176,
+	S_LESS_THAN = 177,
+	U_LESS_THAN_EQUAL = 178,
+	S_LESS_THAN_EQUAL = 179,
+	LOOP_MERGE = 246,
+	SELECTION_MERGE = 247,
 	LABEL = 248,
+	BRANCH = 249,
+	BRANCH_CONDITIONAL = 250,
+	SWITCH = 251,
 	RETURN = 253,
 }
 
@@ -59,6 +74,11 @@ fn uint Opcode.result_index(self) {
 		case DECORATE:
 		case MEMBER_DECORATE:
 		case RETURN:
+		case LOOP_MERGE:
+		case SELECTION_MERGE:
+		case BRANCH:
+		case BRANCH_CONDITIONAL:
+		case SWITCH:
 			return 0;
 		case TYPE_VOID:
 		case TYPE_BOOL:
@@ -86,9 +106,19 @@ fn uint Opcode.result_index(self) {
 		case COMPOSITE_CONSTRUCT:
 		case COMPOSITE_EXTRACT:
 		case COMPOSITE_INSERT:
+		case BITCAST:
 		case I_MUL:
 		case F_MUL:
-		case BITCAST:
+		case I_EQUAL:
+		case I_NOT_EQUAL:
+		case U_GREATER_THAN:
+		case S_GREATER_THAN:
+		case U_GREATER_THAN_EQUAL:
+		case S_GREATER_THAN_EQUAL:
+		case U_LESS_THAN:
+		case S_LESS_THAN:
+		case U_LESS_THAN_EQUAL:
+		case S_LESS_THAN_EQUAL:
 			return 2;
 	}
 
@@ -137,6 +167,12 @@ constdef Decoration : inline uint {
 	BINDING = 33,
 	DESCRIPTOR_SET = 34,
 	OFFSET = 35,
+}
+
+constdef SelectionControl : inline uint {
+	NONE = 0,
+	FLATTEN = 1,
+	DONT_FLATTEN = 2,
 }
 
 constdef Builtin : inline uint {

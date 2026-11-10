@@ -110,17 +110,42 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 
 	Id id;
 	switch(expression.expr_kind) {
+		case EXPR_ACCESS_RESOLVED:
+			ExprResolvedAccess* resolved = &expression.access_resolved_expr;
+			SpirvExpr* parent = emit_expression(context, resolved.parent);
+
+			uint index = spirv_expr.access.index;
+
+			Id result_type = type_id(context, spirv_expr.type.real);
+			if(parent.type.ref != parent.type.real) {
+				Id index_type = context.type_op(TYPE_INT, 32, 0);
+				Id index_id = context.type_op(CONSTANT, index_type, index);
+				id = context.func_op(ACCESS_CHAIN, result_type, parent.id, index_id);
+			} else {
+				id = context.func_op(COMPOSITE_EXTRACT, result_type, parent.id, index);
+			}
+		case EXPR_BINARY:
+			ExprBinary* binary = &expression.binary_expr;
+			Opcode op;
+			// Will need to specialize this to handle signed, unsigned, and floats.
+			switch(binary.operator) {
+				case BINARYOP_LT: op = U_LESS_THAN;
+				default: unreachable("Unsupported binary op kind: %s", ast::const_name(binary.operator));
+			}
+			SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
+			SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
+			id = context.func_op(op, type_id(context, spirv_expr.type.ref), expr_value(context, left), expr_value(context, right));
 		case EXPR_CALL:
 			if(spirv_expr.call.is_builtin) {
 				id = emit_builtin_call(context, spirv_expr);
 				break;
 			}
-		// case EXPR_COND:
-		// 	Expr*[] expressions = ast::vec(expression.cond_expr);
-		// 	foreach(cond : expressions) {
-		// 		emit_expression(context, cond)!;
-		// 	}
-		// 	return {};
+		case EXPR_COND:
+			Expr*[] expressions = ast::vec(expression.cond_expr);
+			foreach(cond : expressions[..^2]) {
+				emit_expression(context, cond);
+			}
+			id = emit_expression(context, expressions[^1]).id;
 		case EXPR_CONST:
 			ExprConst* const_expr = &expression.const_expr;
 			Id type = type_id(context, spirv_expr.type.ref);
@@ -134,12 +159,6 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 					id = context.type_op(op);
 				default: unreachable("Unsupported codegen const %s", ast::const_name(const_expr.const_kind));
 			}
-
-		// case EXPR_BINARY:
-		// 	ExprBinary* binary = &expression.binary_expr;
-		// 	emit_expression(context, ast::expr_ptr(binary.left))!;
-		// 	emit_expression(context, ast::expr_ptr(binary.right))!;
-		// 	return {};
 		case EXPR_IDENTIFIER:
 			SpirvDecl* spirv_decl = expression.ident_expr.backend_ref;
 			id = spirv_decl.variable.id;
@@ -159,6 +178,14 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 				// case TYPE_POINTER: return left.pointer.inner;
 				default: unreachable("Unsupported subscript kind: %s", ast::const_name(left.type.ref.type.type_kind));
 			}
+		case EXPR_UNARY:
+			ExprUnary* unary = &expression.unary_expr;
+			SpirvExpr* inner = emit_expression(context, unary.expr);
+			switch(unary.operator) {
+				case UNARYOP_DEREF:
+					id = expr_value(context, inner);
+				default: unreachable("Unsupported unary kind: %s", ast::const_name(unary.operator));
+			}
 		default: unreachable("Unsupported codegen expression: %s", ast::const_name(expression.expr_kind));
 	}
 
@@ -167,7 +194,7 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 	return spirv_expr;
 }
 
-fn Id emit_expr_value(EmissionContext* context, SpirvExpr* expression) {
+fn Id expr_value(EmissionContext* context, SpirvExpr* expression) {
 	if(expression.type.ref != expression.type.real) {
 		return context.func_op(LOAD, type_id(context, expression.type.ref), expression.id);
 	} else {
@@ -185,7 +212,7 @@ fn void emit_declaration(EmissionContext* context, Decl* declaration) {
 			Id type = type_id(context, spirv_decl.variable.type);
 			Id initializer;
 			if(var_decl.init_expr) {
-				initializer = emit_expr_value(context, emit_expression(context, var_decl.init_expr));
+				initializer = expr_value(context, emit_expression(context, var_decl.init_expr));
 			}
 
 			if(!spirv_decl.variable.writeable) {
@@ -205,6 +232,14 @@ fn void emit_declaration(EmissionContext* context, Decl* declaration) {
 	}
 }
 
+// Pushes an OpStream into the context's func_ops variable for the duration of the body.
+macro void @push_stream(EmissionContext* context, OpStream* stream; @body) {
+	OpStream* old_stream = context.func_ops;
+	context.func_ops = stream;
+	@body();
+	context.func_ops = old_stream;
+}
+
 fn void emit_statement(EmissionContext* context, Ast* statement) {
 	while(statement) {
 		switch(statement.ast_kind) {
@@ -212,11 +247,33 @@ fn void emit_statement(EmissionContext* context, Ast* statement) {
 				emit_statement(context, ast::ast_ptr(statement.compound_stmt.first_stmt));
 			case AST_DECLARE_STMT:
 				emit_declaration(context, statement.declare_stmt);
-			// case AST_IF_STMT:
-			// 	AstIfStmt* specific = &statement.if_stmt;
-			// 	emit_expression(context, ast::expr_ptr(specific.cond))!;
-			// 	emit_statement(context, ast::ast_ptr(specific.then_body))!;
-			// 	emit_statement(context, ast::ast_ptr(specific.else_body))!;
+			case AST_EXPR_STMT:
+				emit_expression(context, statement.expr_stmt);
+			case AST_IF_STMT:
+				AstIfStmt* if_statement = &statement.if_stmt;
+				SpirvExpr* condition = emit_expression(context, ast::expr_ptr(if_statement.cond));
+
+				assert(!if_statement.else_body);
+
+				OpStream merge_stream;
+				Id merge_label;
+				@push_stream(context, &merge_stream) {
+					merge_label = context.func_op(LABEL);
+				};
+
+				OpStream then_stream;
+				Id then_label;
+				@push_stream(context, &then_stream) {
+					then_label = context.func_op(LABEL);
+					emit_statement(context, ast::ast_ptr(if_statement.then_body));
+					context.func_op(BRANCH, merge_label);
+				};
+
+				context.func_op(SELECTION_MERGE, merge_label, SelectionControl.NONE);
+				context.func_op(BRANCH_CONDITIONAL, expr_value(context, condition), then_label, merge_label);
+
+				append_stream(context, &then_stream);
+				append_stream(context, &merge_stream);
 			default: unreachable("Unsupported codegen statement: %s", ast::const_name(statement.ast_kind));
 		}
 
@@ -232,9 +289,15 @@ fn void emit_entry_point(EmissionContext* context, SpirvEntryPoint* entry) {
 	Id label = context.func_op(LABEL);
 	Op* label_op = context.func_ops.last_op;
 
-	emit_statement(context, ast::ast_ptr(entry.declaration.func_decl.body));
+	OpStream body;
+	@push_stream(context, &body) {
+		emit_statement(context, ast::ast_ptr(entry.declaration.func_decl.body));
+	};
 
-	label_op.insert_stream(&context.func_var_ops);
+	// Need to have all variable ops at the start of the function.
+	append_stream(context, &context.func_var_ops);
+	append_stream(context, &body);
+
 	context.func_op(RETURN);
 	context.func_op(FUNCTION_END);
 

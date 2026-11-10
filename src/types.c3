@@ -59,6 +59,9 @@ struct SpirvExpr {
 			bool is_builtin;
 			ShaderBuiltin builtin;
 		}
+		struct access {
+			uint index;
+		}
 	}
 }
 
@@ -88,7 +91,9 @@ struct EmissionContext {
 	OpStream init_ops;
 	OpStream decoration_ops;
 	OpStream type_ops;
-	OpStream func_ops;
+	OpStream top_func_ops;
+
+	OpStream* func_ops;
 
 	// Function specific stuff, managed by emit_function and emit_entry_point.
 	OpStream func_var_ops;
@@ -104,8 +109,9 @@ fn void EmissionContext.init(&self, sz vmem_size) {
 	self.entry_points.init(&self.vmem);
 	self.types.init(&self.vmem);
 	self.func_interfaces.init(&self.vmem);
-	// self.global_ids.init(&self.vmem);
+
 	self.id_count = 1;
+	self.func_ops = &self.top_func_ops;
 }
 
 fn void EmissionContext.free(&self) {

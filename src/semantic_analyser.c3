@@ -197,6 +197,13 @@ fn ExprType expr_type(SpirvType* value) {
 }
 
 fn ExprType expr_deref(ExprType type) {
+	if(type.real == type.ref) {
+		return {
+			.real = type.real,
+			.ref = type.ref.pointer.inner,
+		};
+	}
+
 	return {
 		.real = type.real.pointer.inner,
 		.ref = type.ref.pointer.inner,
@@ -204,6 +211,7 @@ fn ExprType expr_deref(ExprType type) {
 }
 
 fn ExprType expr_addr(ExprType type) {
+	assert(type.real != type.ref);
 	return {
 		.real = type.real,
 		.ref = type.real,
@@ -222,13 +230,15 @@ fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bo
 			ExprResolvedAccess* resolved = &expression.access_resolved_expr;
 			SpirvExpr* parent = analyse_expression(context, resolved.parent)!;
 
-			sz member_index;
-			foreach(sz i, Decl* member : ast::vec(parent.type.ref.type.decl.strukt.members)) {
+			uint member_index;
+			foreach(uint i, Decl* member : ast::vec(parent.type.ref.type.decl.strukt.members)) {
 				if(member == resolved.ref) {
 					member_index = i;
 					break;
 				}
 			}
+
+			spirv_expression.access.index = member_index;
 
 			SpirvType* member_type = parent.type.ref.structure.members[member_index];
 			type.ref = member_type;

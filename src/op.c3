@@ -41,6 +41,19 @@ fn bool Op.equals(&a, Op* b) {
 	return true;
 }
 
+// Append a given stream to the context's func_ops stream.
+fn void append_stream(EmissionContext* context, OpStream* stream) {
+	if(stream.first_op == null) {
+		return;
+	}
+
+	Op* last_op = context.func_ops.last_op;
+	last_op.next = stream.first_op;
+	context.func_ops.last_op = stream.last_op;
+
+	*stream = {};
+}
+
 fn void Op.insert_stream(&self, OpStream* stream) {
 	if(stream.first_op == null) {
 		return;

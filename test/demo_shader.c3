@@ -61,18 +61,18 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// This should just create an OpVariable and load from the invocation_id, pretty simple.
 	uint id = invocation_id.x;
 
-	// // Branches are a little complex, but I think it should be possible to represent them well.
-	// // Will need to do some more experimentation here.
-	// if(id < root.count) {
-	// 	// As members of the root, output and input should implicitly be of the PhysicalStorageBuffer
-	// 	// storage class. Their array stride should just be equal to their size, and to make things
-	// 	// easier it may be best to always decorate pointers with array stride, even if it's never
-	// 	// used. The other option is to only decorate with array stride when necessary, which is
-	// 	// probably possible.
+	// Branches are a little complex, but I think it should be possible to represent them well.
+	// Will need to do some more experimentation here.
+	if(id < root.count) {
+		// As members of the root, output and input should implicitly be of the PhysicalStorageBuffer
+		// storage class. Their array stride should just be equal to their size, and to make things
+		// easier it may be best to always decorate pointers with array stride, even if it's never
+		// used. The other option is to only decorate with array stride when necessary, which is
+		// probably possible.
 
-	// 	// The constant 2f here should be unique (to make the SPIR-V smaller hopefully), and our type_op
-	// 	// system should handle that neatly. There is the matter of 64 bit floating point, but handling
-	// 	// that is a whole other can of worms.
-	// 	root.output[id] = root.input[id] * 2f;
-	// }
+		// The constant 2f here should be unique (to make the SPIR-V smaller hopefully), and our type_op
+		// system should handle that neatly. There is the matter of 64 bit floating point, but handling
+		// that is a whole other can of worms.
+		// root.output[id] = root.input[id] * 2f;
+	}
 }
