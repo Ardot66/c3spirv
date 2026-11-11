@@ -247,13 +247,10 @@ fn Id EmissionContext.func_var_op(&self, Opcode opcode, uint... operands) {
 	return self.func_var_ops.op_raw(self, opcode, operands);
 }
 
-fn uint[] tstr_literal(String string) {
-	// + 4 here because if the string perfectly fits into the literal that leaves no space
-	// for the null terminator!
-	sz elements = (string.len + 4) / 4; 
-
-	uint[] literal = mem::talloc_array(uint, elements);
-	literal[^1] = 0;
-	mem::copy(literal, string, string.len);
-	return literal;
+// Pushes an OpStream into the context's func_ops variable for the duration of the body.
+macro void @push_stream(EmissionContext* context, OpStream* stream; @body) {
+	OpStream* old_stream = context.func_ops;
+	context.func_ops = stream;
+	@body();
+	context.func_ops = old_stream;
 }
