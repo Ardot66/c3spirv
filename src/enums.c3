@@ -35,6 +35,8 @@ constdef Opcode : ushort {
 	COMPOSITE_CONSTRUCT = 80,
 	COMPOSITE_EXTRACT = 81,
 	COMPOSITE_INSERT = 82,
+	U_CONVERT = 113,
+	S_CONVERT = 114,
 	BITCAST = 124,
 	I_MUL = 132,
 	F_MUL = 133,
@@ -106,6 +108,8 @@ fn uint Opcode.result_index(self) {
 		case COMPOSITE_CONSTRUCT:
 		case COMPOSITE_EXTRACT:
 		case COMPOSITE_INSERT:
+		case U_CONVERT:
+		case S_CONVERT:
 		case BITCAST:
 		case I_MUL:
 		case F_MUL:

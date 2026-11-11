@@ -73,6 +73,6 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 		// The constant 2f here should be unique (to make the SPIR-V smaller hopefully), and our type_op
 		// system should handle that neatly. There is the matter of 64 bit floating point, but handling
 		// that is a whole other can of worms.
-		// root.output[id] = root.input[id] * 2f;
+		root.output[id] = root.input[id] * 2f;
 	}
 }

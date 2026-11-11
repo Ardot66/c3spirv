@@ -76,6 +76,44 @@ fn Id EmissionContext.generate_id(&self) {
 	return (Id)self.id_count;
 }
 
+fn void EmissionContext.print(&self) {
+	self.init_ops.print();
+	self.decoration_ops.print();
+	self.type_ops.print();
+	self.func_ops.print();
+}
+
+fn void OpStream.print(&self) => @pool() {
+	DString buffer;
+	buffer.tinit(256);
+	Op* op = self.first_op;
+	while(op) {
+		uint opsize = op.opsize();
+		Opcode opcode = op.opcode();
+
+		uint result_index = op.result_index();
+		uint result_id = result_index == 0 ? 0 : op.operands[result_index];
+		if(result_index) {
+			buffer.appendf("%%%s = ", result_id);
+		}
+		buffer.appendf("%s ", ast::const_name(opcode));
+		sz whitespace = 30 - buffer.len();
+		for(sz i = 0; i < whitespace; i++) {
+			io::print(" ");
+		}
+		io::print(buffer);
+		for(sz i = 1; i < opsize; i++) {
+			if(i == result_index) continue;
+			io::printf("%s ", op.operands[i]);
+		}
+		io::print("\n");
+
+		op = op.next;
+
+		buffer.clear();
+	}
+}
+
 fn void? EmissionContext.write(&self, OutStream stream) {
 	uint[5] header = {
 		0x07230203, // SPIR-V magic number.

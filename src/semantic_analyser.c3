@@ -196,17 +196,31 @@ fn ExprType expr_type(SpirvType* value) {
 	return {value, value};
 }
 
+fn SpirvType* inner_type(SpirvType* type) {
+	if(type.type == null) {
+		return type.pointer.inner;
+	}
+
+	switch(type.type.type_kind) {
+		case TYPE_POINTER: return type.pointer.inner;
+		case TYPE_VECTOR: return type.vector.member;
+		default: return type;
+	}
+}
+
 fn ExprType expr_deref(ExprType type) {
+	SpirvType* real_inner = inner_type(type.real);
+
 	if(type.real == type.ref) {
 		return {
 			.real = type.real,
-			.ref = type.ref.pointer.inner,
+			.ref = inner_type(type.ref),
 		};
 	}
 
 	return {
-		.real = type.real.pointer.inner,
-		.ref = type.ref.pointer.inner,
+		.real = inner_type(type.real),
+		.ref = inner_type(type.ref),
 	};
 }
 
@@ -250,8 +264,17 @@ fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bo
 		case EXPR_BINARY:
 			ExprBinary* binary = &expression.binary_expr;
 			analyse_expression(context, ast::expr_ptr(binary.left), true)!;
-			analyse_expression(context, ast::expr_ptr(binary.right), true)!;
-			type = expr_type(create_type_primitive(context, c3spirv::bool_type));
+			SpirvExpr* right = analyse_expression(context, ast::expr_ptr(binary.right), true)!;
+			switch(binary.operator) {
+				case BINARYOP_GT:
+				case BINARYOP_GE:
+				case BINARYOP_LT:
+				case BINARYOP_LE:
+				case BINARYOP_NE:
+				case BINARYOP_EQ:
+					type = expr_type(create_type_primitive(context, c3spirv::bool_type));
+				default: type = expr_deref(right.type);
+			}
 		case EXPR_CALL:
 			ExprCall* call = &expression.call_expr;
 			Decl* declaration = ast::decl_ptr(call.func_ref);
@@ -272,8 +295,8 @@ fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bo
 			type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
 		case EXPR_EXT_TRUNC:
 			ExprExtTrunc* trunc = &expression.ext_trunc_expr;
-			analyse_expression(context, trunc.inner)!;
-			type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
+			type = analyse_expression(context, trunc.inner).type!;
+			// type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
 		case EXPR_IDENTIFIER:
 			SpirvDecl* declaration = expression.ident_expr.backend_ref;
 			type = {
@@ -288,15 +311,13 @@ fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bo
 
 			SpirvType* result;
 			switch(expr.type.ref.type.type_kind) {
-				case TYPE_VECTOR: type = expr_type(expr.type.ref.vector.member);
-				case TYPE_POINTER: type = expr_type(expr.type.ref.pointer.inner);
+				case TYPE_VECTOR:
+					type = expr_type(expr.type.ref.vector.member);
+					if(expr.type.ref != expr.type.real) {
+						type.real = create_type_pointer(context, null, expr.type.real.pointer.class, type.ref);
+					}
+				case TYPE_POINTER: type = expr_deref(expr_type(expr.type.ref));
 				default: return err::error(expression.loc, "Unsupported subscript type kind: %s", ast::const_name(expr.type.ref.type.type_kind))~;
-			}
-
-			if(expr.type.ref != expr.type.real) {
-				type.real = create_type_pointer(context, null, expr.type.real.pointer.class, type.ref);
-			} else {
-				type.real = type.ref;
 			}
 		case EXPR_UNARY:
 			ExprUnary* unary = &expression.unary_expr;

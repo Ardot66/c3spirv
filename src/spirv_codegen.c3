@@ -6,7 +6,11 @@ import std::io;
 fn Id pointer_type_id(EmissionContext* context, SpirvType* type) {
 	SpirvType* inner = type.pointer.inner;
 	Id inner_id = type_id(context, inner);
-	return context.type_op(TYPE_POINTER, type.pointer.class, inner_id);
+	Id pointer_id = context.type_op(TYPE_POINTER, type.pointer.class, inner_id);
+	if(inner.type.size > 0) {
+		context.decoration_op(DECORATE, pointer_id, Decoration.ARRAY_STRIDE, (uint)inner.type.size);
+	}
+	return pointer_id;
 }
 
 fn Id type_id(EmissionContext* context, SpirvType* type) {
@@ -96,14 +100,37 @@ fn Id emit_builtin_call(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return id;
 }
 
-// fn Id emit_variable_load(EmissionContext* context, SpirvDecl* spirv_decl) {
-// 	assert(spirv_decl.declaration.decl_kind == DECL_VAR);
-// 	if(spirv_decl.variable.writeable) {
-// 		return context.func_op(LOAD, type_id(context, spirv_decl.variable.type), spirv_decl.variable.id);
-// 	} else {
-// 		return spirv_decl.variable.id;
-// 	}
-// }
+fn Id emit_binary_math(EmissionContext* context, SpirvExpr* spirv_expr, Opcode op) {
+	ExprBinary* binary = &spirv_expr.expression.binary_expr;
+	SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
+	SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
+	return context.func_op(
+		op, 
+		type_id(context, spirv_expr.type.ref), 
+		expr_value(context, left), 
+		expr_value(context, right
+	));
+}
+
+fn Id emit_binary_assign(EmissionContext* context, SpirvExpr* spirv_expr) {
+	ExprBinary* binary = &spirv_expr.expression.binary_expr;
+	SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
+	SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
+	context.func_op(STORE, left.id, expr_value(context, right), (uint)(MemoryOperands){.aligned}, 4);
+	return right.id;
+}
+
+fn Id emit_binary_expression(EmissionContext* context, SpirvExpr* spirv_expr) {
+	ExprBinary* binary = &spirv_expr.expression.binary_expr;
+
+	// Will need to specialize this to handle signed, unsigned, and floats.
+	switch(binary.operator) {
+		case BINARYOP_LT: return emit_binary_math(context, spirv_expr, U_LESS_THAN);
+		case BINARYOP_MULT: return emit_binary_math(context, spirv_expr, F_MUL);
+		case BINARYOP_ASSIGN: return emit_binary_assign(context, spirv_expr);
+		default: unreachable("Unsupported binary op kind: %s", ast::const_name(binary.operator));
+	}
+}
 
 fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 	SpirvExpr* spirv_expr = context.spirv_expressions.get(expression)!!;
@@ -124,17 +151,7 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 			} else {
 				id = context.func_op(COMPOSITE_EXTRACT, result_type, parent.id, index);
 			}
-		case EXPR_BINARY:
-			ExprBinary* binary = &expression.binary_expr;
-			Opcode op;
-			// Will need to specialize this to handle signed, unsigned, and floats.
-			switch(binary.operator) {
-				case BINARYOP_LT: op = U_LESS_THAN;
-				default: unreachable("Unsupported binary op kind: %s", ast::const_name(binary.operator));
-			}
-			SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
-			SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
-			id = context.func_op(op, type_id(context, spirv_expr.type.ref), expr_value(context, left), expr_value(context, right));
+		case EXPR_BINARY: id = emit_binary_expression(context, spirv_expr);
 		case EXPR_CALL:
 			if(spirv_expr.call.is_builtin) {
 				id = emit_builtin_call(context, spirv_expr);
@@ -159,6 +176,15 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 					id = context.type_op(op);
 				default: unreachable("Unsupported codegen const %s", ast::const_name(const_expr.const_kind));
 			}
+		case EXPR_EXT_TRUNC:
+			ExprExtTrunc* trunc = &expression.ext_trunc_expr;
+			id = emit_expression(context, trunc.inner).id;
+			// if(inner.type.ref == spirv_expr.type.ref) {
+			// 	id = expr_value(context, inner);
+			// } else {
+			// 	Opcode op = trunc.is_signed ? S_CONVERT : U_CONVERT;
+			// 	id = context.func_op(op, type_id(context, spirv_expr.type.ref), expr_value(context, inner));
+			// }
 		case EXPR_IDENTIFIER:
 			SpirvDecl* spirv_decl = expression.ident_expr.backend_ref;
 			id = spirv_decl.variable.id;
@@ -171,11 +197,12 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 			switch(left.type.ref.type.type_kind) {
 				case TYPE_VECTOR:
 					if(left.type.ref != left.type.real) {
-						id = context.func_op(ACCESS_CHAIN, type_id(context, spirv_expr.type.real), left.id, right.id);
+						id = context.func_op(ACCESS_CHAIN, type_id(context, spirv_expr.type.real), left.id, expr_value(context, right));
 					} else {
-						id = context.func_op(VECTOR_EXTRACT_DYNAMIC, type_id(context, spirv_expr.type.real), left.id, right.id);
+						id = context.func_op(VECTOR_EXTRACT_DYNAMIC, type_id(context, spirv_expr.type.real), left.id, expr_value(context, right));
 					}
-				// case TYPE_POINTER: return left.pointer.inner;
+				case TYPE_POINTER: 
+					id = context.func_op(PTR_ACCESS_CHAIN, type_id(context, spirv_expr.type.real), expr_value(context, left), expr_value(context, right));
 				default: unreachable("Unsupported subscript kind: %s", ast::const_name(left.type.ref.type.type_kind));
 			}
 		case EXPR_UNARY:
@@ -196,7 +223,7 @@ fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) {
 
 fn Id expr_value(EmissionContext* context, SpirvExpr* expression) {
 	if(expression.type.ref != expression.type.real) {
-		return context.func_op(LOAD, type_id(context, expression.type.ref), expression.id);
+		return context.func_op(LOAD, type_id(context, expression.type.ref), expression.id, (uint)(MemoryOperands){.aligned}, 4);
 	} else {
 		return expression.id;
 	}
