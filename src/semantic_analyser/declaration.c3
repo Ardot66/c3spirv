@@ -1,4 +1,4 @@
-module ardot::c3spirv::sema;
+module ardot::c3spirv::sema @local;
 import ardot::c3c::ast, ardot::c3spirv;
 
 fn bool can_write_variable(SpirvType* type) => type.type.type_kind != TYPE_POINTER;
@@ -30,19 +30,22 @@ fn void? analyse_set_var(EmissionContext* context, SpirvDecl* variable, SpirvTyp
 	}
 }
 
-fn void? analyse_declaration(EmissionContext* context, Decl* declaration) {
-	SpirvDecl* spirv_declaration = alloc::new(&context.vmem, SpirvDecl, {
+fn void? analyse_var(EmissionContext* context, SpirvDecl* spirv_decl) {
+	VarDecl* variable = &spirv_decl.declaration.var_field;
+	if(variable.init_expr) {
+		SpirvType* initializer = analyse_expression(context, variable.init_expr).type.ref!;
+		analyse_set_var(context, spirv_decl, initializer, variable.init_expr.loc)!;
+	}
+}
+
+fn void? analyse_declaration(EmissionContext* context, Decl* declaration) @public {
+	SpirvDecl* spirv_decl = alloc::new(&context.vmem, SpirvDecl, {
 		.declaration = declaration,
 	});
-	declaration.backend_ref = spirv_declaration;
+	declaration.backend_ref = spirv_decl;
 
 	switch(declaration.decl_kind) {
-		case DECL_VAR:
-			VarDecl* variable = &declaration.var_field;
-			if(variable.init_expr) {
-				SpirvType* initializer = analyse_expression(context, variable.init_expr).type.ref!;
-				analyse_set_var(context, spirv_declaration, initializer, variable.init_expr.loc)!;
-			}
+		case DECL_VAR: analyse_var(context, spirv_decl)!;
 		default: return err::error(declaration.loc, "Unsupported declaration kind: %s", ast::const_name(declaration.decl_kind))~;
 	}
 }
