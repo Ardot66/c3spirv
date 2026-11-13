@@ -1,6 +1,8 @@
 module ardot::c3spirv;
 import ardot::c3c::ast, std::collections::list, std::collections::map;
 
+import std::io;
+
 typedef Id = inline uint;
 
 struct SpirvEntryPoint {
@@ -14,14 +16,28 @@ struct SpirvEntryPoint {
 }
 
 struct SpirvType {
-	Id id;
 	Type* type;
+	Id id;
+	bitstruct : uint {
+		TypeKind kind : 0..16;
+		// Whether the type an all subtypes have had their storage class
+		// determined.
+		bool resolved : 17;
+	}
+	// If this type was resolved, it is going to be a copy of another existing type.
+	// This variable points back to that existing type to make codegen more efficient.	 
+	SpirvType* original;
+
+	// All SpirvTypes are stored in a linked list so that they can be fully resolved
+	// in another sema pass.
+	SpirvType* next;
 	union {
 		struct pointer {
 			SpirvType* inner;
 			StorageClass class;
 		}
 		struct structure {
+			bool block;
 			SpirvType*[] members;
 		}
 		struct vector {
@@ -35,19 +51,17 @@ struct SpirvDecl {
 	Decl* declaration;
 	union {
 		struct variable {
-			bool writeable;
-			SpirvType* type;
-			SpirvType* real_type;
-			Id id;
+			ExprType type;
 			Id pointer_type_id;
+			Id id;
 		}
 	}
 }
 
 struct ExprType {
-	SpirvType* real;
 	// The type being pointed at, it is the same as the real type if there is no reference.
 	SpirvType* ref;
+	SpirvType* real;
 }
 
 struct SpirvExpr {
@@ -80,10 +94,12 @@ typedef HashOp = inline Op*;
 
 struct EmissionContext {
 	List{SpirvEntryPoint*} entry_points;
+	SpirvType* first_type;
+	SpirvType* last_type;
 
 	Vmem vmem;
 	uint id_count;
-	HashMap{char[], SpirvType*} types;
+	HashMap{SpirvType, SpirvType*} types;
 	HashMap{Expr*, SpirvExpr*} spirv_expressions;
 	HashMap{HashOp, Id} op_map;
 	// HashMap{HashOp, Id} global_ids;
@@ -102,6 +118,9 @@ struct EmissionContext {
 
 macro char[] byte_view(void* ptr, sz size) => ((char*)ptr)[..size - 1];
 
+fn uint SpirvType.hash(self) => byte_view(&self, SpirvType::size).hash();
+fn bool SpirvType.equals(SpirvType a, SpirvType b) => byte_view(&a, SpirvType::size) == byte_view(&b, SpirvType::size);
+
 fn uint Expr.hash(Expr* self) => void*.hash(self);
 
 fn void EmissionContext.init(&self, sz vmem_size) {
@@ -118,3 +137,13 @@ fn void EmissionContext.free(&self) {
 	self.vmem.free();
 }
 
+fn void EmissionContext.add_type(&self, SpirvType* type) {
+	if(!self.first_type) {
+		self.first_type = type;
+		self.last_type = type;
+		return;
+	}
+
+	self.last_type.next = type;
+	self.last_type = type;
+}

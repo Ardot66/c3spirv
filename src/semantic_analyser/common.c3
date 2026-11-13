@@ -1,8 +1,10 @@
 module ardot::c3spirv::sema;
 import ardot::c3c::ast, ardot::c3spirv;
 
+import std::io;
+
 fn ExprType expr_type(SpirvType* value) {
-	return {value, value};
+	return {.ref = value, .real = value};
 }
 
 fn SpirvType* inner_type(SpirvType* type) {
@@ -17,10 +19,26 @@ fn SpirvType* inner_type(SpirvType* type) {
 	}
 }
 
+fn bool types_equal(SpirvType* a, SpirvType* b) {
+	// SpirvType.original is set to be a circular reference for original types,
+	// so this check works.
+	return a.original == b.original;
+}
+
+fn bool ExprType.is_ref(self) => !types_equal(self.real, self.ref);
+
+fn void? analyse_assignment(EmissionContext* context, ExprType variable, ExprType value, SourceLocId loc) {
+	if(!variable.is_ref()) {
+		return err::error(loc, "Cannot assign to this value, it is not a reference.")~;
+	}
+
+	resolve_type(context, variable.ref, value.ref, loc)!;
+}
+
 fn ExprType expr_deref(ExprType type) {
 	SpirvType* real_inner = inner_type(type.real);
 
-	if(type.real == type.ref) {
+	if(!type.is_ref()) {
 		return {
 			.real = type.real,
 			.ref = inner_type(type.ref),
@@ -34,7 +52,7 @@ fn ExprType expr_deref(ExprType type) {
 }
 
 fn ExprType expr_addr(ExprType type) {
-	assert(type.real != type.ref);
+	assert(type.is_ref());
 	return {
 		.real = type.real,
 		.ref = type.real,

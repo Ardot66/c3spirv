@@ -1,40 +1,28 @@
 module ardot::c3spirv::sema @local;
 import ardot::c3c::ast, ardot::c3spirv;
 
-fn bool can_write_variable(SpirvType* type) => type.type.type_kind != TYPE_POINTER;
-fn void? analyse_set_var(EmissionContext* context, SpirvDecl* variable, SpirvType* value, SourceLocId loc) {
-	if(variable.variable.type) {
-		if(variable.variable.type != value) {
-			err::error(loc, "Cannot set variable, conflicting pointer types!");
-			return err::error_note(variable.declaration.loc, "The variable was declared here.")~;
-		} else if(!variable.variable.writeable) {
-			err::error(loc, "Cannot set the value of a pointer variable more than once.");
-			return err::error_note(variable.declaration.loc, "The variable was declared here.")~;
-		}
-
-		return;
-	}
-
-	if(variable.declaration.type != value.type) {
-		unreachable();
-	}
-
-	variable.variable.type = value;
-	bool writeable = can_write_variable(value);
-	variable.variable.writeable = writeable;
-
-	if(writeable) {
-		variable.variable.real_type = create_type_pointer(context, null, StorageClass.FUNCTION, value);
-	} else {
-		variable.variable.real_type = value;
-	}
-}
+import std::io;
 
 fn void? analyse_var(EmissionContext* context, SpirvDecl* spirv_decl) {
 	VarDecl* variable = &spirv_decl.declaration.var_field;
+
+	ExprType type = expr_type(analyse_type(context, spirv_decl.declaration.type, spirv_decl.declaration.loc, UNRESOLVED))!;
+	// If the type kind is a pointer, then we can't create a SPIR-V variable to it, so
+	// we do nothing. If it isn't, then it must be a value type of some kind, so we
+	// can safely create a variable, and the pointer to the variable must have the FUNCTION storage class.
+	if(type.ref.kind != TYPE_POINTER) {
+		type.real = create_type_pointer(context, null, FUNCTION, type.ref);
+	}
+	spirv_decl.variable.type = type;
+
 	if(variable.init_expr) {
-		SpirvType* initializer = analyse_expression(context, variable.init_expr).type.ref!;
-		analyse_set_var(context, spirv_decl, initializer, variable.init_expr.loc)!;
+		SpirvExpr* init = analyse_expression(context, variable.init_expr)!;
+		// Intentionally not using analyse_assignment here because we allow the special
+		// case where we can't create a proper SPIR-V variable, but we can use a SSA ID
+		// from the initializer.
+		resolve_type(context, type.ref, init.type.ref, variable.init_expr.loc)!;
+	} else if(!type.is_ref()) {
+		return err::error(spirv_decl.declaration.loc, "Variables containing pointers must have an initializer.")~;
 	}
 }
 

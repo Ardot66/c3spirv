@@ -1,6 +1,8 @@
 module ardot::c3spirv::sema @local;
 import ardot::c3c::ast, ardot::c3spirv;
 
+import std::io;
+
 fn ExprType? analyse_access(EmissionContext* context, SpirvExpr* spirv_expr) {
 	ExprResolvedAccess* resolved = &spirv_expr.expression.access_resolved_expr;
 	SpirvExpr* parent = analyse_expression(context, resolved.parent)!;
@@ -26,8 +28,8 @@ fn ExprType? analyse_access(EmissionContext* context, SpirvExpr* spirv_expr) {
 
 fn ExprType? analyse_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
-	analyse_expression(context, ast::expr_ptr(binary.left), true)!;
-	SpirvExpr* right = analyse_expression(context, ast::expr_ptr(binary.right), true)!;
+	SpirvExpr* left = analyse_expression(context, ast::expr_ptr(binary.left))!;
+	SpirvExpr* right = analyse_expression(context, ast::expr_ptr(binary.right))!;
 	switch(binary.operator) {
 		case BINARYOP_GT:
 		case BINARYOP_GE:
@@ -36,6 +38,9 @@ fn ExprType? analyse_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
 		case BINARYOP_NE:
 		case BINARYOP_EQ:
 			return expr_type(create_type_primitive(context, c3spirv::bool_type));
+		case BINARYOP_ASSIGN:
+			analyse_assignment(context, left.type, right.type, spirv_expr.expression.loc)!;
+			nextcase default;
 		default: return expr_deref(right.type);
 	}
 }
@@ -56,10 +61,7 @@ fn ExprType? analyse_ext_trunc(EmissionContext* context, SpirvExpr* spirv_expr) 
 
 fn ExprType? analyse_identifier(EmissionContext* context, SpirvExpr* spirv_expr) {
 	SpirvDecl* declaration = spirv_expr.expression.ident_expr.backend_ref;
-	return {
-		.real = declaration.variable.real_type,
-		.ref = declaration.variable.type
-	};
+	return declaration.variable.type;
 }
 
 fn ExprType? analyse_subscript(EmissionContext* context, SpirvExpr* spirv_expr) {
@@ -108,10 +110,10 @@ fn SpirvType*? analyse_builtin_call(EmissionContext* context, SpirvExpr* spirv_e
 				return err::error(expression.loc, "The root type must be a struct.")~;
 			}
 
-			SpirvType* spirv_inner = analyse_physical_type(context, inner, expression.loc)!;
+			SpirvType* spirv_inner = analyse_type(context, inner, expression.loc, PHYSICAL)!;
 			return create_type_pointer(context, rtype, UNIFORM, spirv_inner);
 		case GET_GLOBAL_INVOCATION_ID:
-			return analyse_logical_type(context, rtype, expression.loc)!;
+			return analyse_type(context, rtype, expression.loc, LOGICAL)!;
 		default: return err::error(expression.loc, "Unsupported builtin.")~;
 	}
 }
@@ -128,7 +130,7 @@ fn ExprType? analyse_call(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bool allow_null = false) @public {
+fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression) @public {
 	SpirvExpr* spirv_expr = alloc::new(&context.vmem, SpirvExpr, {
 		.expression = expression,
 	});
@@ -140,7 +142,7 @@ fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bo
 		case EXPR_BINARY: type = analyse_binary(context, spirv_expr)!;
 		case EXPR_CALL: type = analyse_call(context, spirv_expr)!;
 		case EXPR_COND: type = analyse_cond(context, spirv_expr)!;
-		case EXPR_CONST: type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
+		case EXPR_CONST: type = expr_type(analyse_type(context, expression.type, expression.loc, LOGICAL))!;
 		case EXPR_EXT_TRUNC: type = analyse_ext_trunc(context, spirv_expr)!;
 		case EXPR_IDENTIFIER: type = analyse_identifier(context, spirv_expr)!;
 		case EXPR_SUBSCRIPT: type = analyse_subscript(context, spirv_expr)!;
@@ -148,10 +150,8 @@ fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression, bo
 		default: return err::error(expression.loc, "Unsupported expression kind: %s", ast::const_name(expression.expr_kind))~;
 	}
 
-	if(!allow_null) {
-		assert(type.real);
-		assert(type.ref);
-	}
+	assert(type.real);
+	assert(type.ref);
 
 	spirv_expr.type = type;
 	return spirv_expr;

@@ -12,6 +12,11 @@ fn Id pointer_type_id(EmissionContext* context, SpirvType* type) {
 }
 
 fn Id type_id(EmissionContext* context, SpirvType* type) {
+	assert(type.resolved);
+
+	// Make sure we're working with the original type to make things more efficient.
+	type = type.original;
+
 	if(type.id) {
 		return type.id;
 	} else if(!type.type) {
@@ -49,10 +54,14 @@ fn Id type_id(EmissionContext* context, SpirvType* type) {
 				member_ids[i] = type_id(context, member);
 			};
 
-			id = context.type_op_raw(TYPE_STRUCT, (uint[])member_ids);
-			context.decoration_op(DECORATE, id, Decoration.BLOCK);
-			foreach(sz i, Decl* member : ast::vec(struct_decl.members)) {
-				context.decoration_op(MEMBER_DECORATE, id, (uint)i, Decoration.OFFSET, (uint)member.offset);
+			// Need to use op_raw here because struct type ops might be identical, but
+			// should have different decorations.
+			id = context.type_ops.op_raw(context, TYPE_STRUCT, (uint[])member_ids);
+			if(type.structure.block) {
+				context.decoration_op(DECORATE, id, Decoration.BLOCK);
+				foreach(sz i, Decl* member : ast::vec(struct_decl.members)) {
+					context.decoration_op(MEMBER_DECORATE, id, (uint)i, Decoration.OFFSET, (uint)member.offset);
+				}
 			}
 		};
 		case TYPE_VECTOR:
@@ -66,4 +75,3 @@ fn Id type_id(EmissionContext* context, SpirvType* type) {
 	type.id = id;
 	return id;
 }
-

@@ -162,6 +162,7 @@ constdef StorageClass : inline uint {
 	FUNCTION = 7,
 	STORAGE_BUFFER = 12,
 	PHYSICAL_STORAGE_BUFFER = 5349,
+	INVALID = uint::max,
 }
 
 constdef Decoration : inline uint {

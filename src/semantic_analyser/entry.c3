@@ -1,6 +1,8 @@
 module ardot::c3spirv::sema;
 import ardot::c3c::ast, ardot::c3spirv;
 
+import std::io;
+
 fn void? analyse_entry_point(EmissionContext* context, Decl* decl) {
 	Expr*[]? attribute_params = get_attribute(decl, SHADER);
 	if(catch attribute_params) {
@@ -45,5 +47,11 @@ fn void? analyse(EmissionContext* context) {
 				analyse_entry_point(context, function)!;
 			}
 		}
+	}
+
+	SpirvType* type = context.first_type;
+	while(type) {
+		resolve_type_final(context, type);
+		type = type.next;
 	}
 }
