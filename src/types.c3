@@ -42,7 +42,7 @@ struct SpirvType {
 		}
 		struct vector {
 			SpirvType* member;
-			int length;
+			uint length;
 		}
 	}
 }

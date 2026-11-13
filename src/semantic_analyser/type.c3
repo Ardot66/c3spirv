@@ -42,7 +42,7 @@ fn SpirvType* create_type_struct(EmissionContext* context, Type* type, SpirvType
 	return create_type(context, &struct_type);
 }
 
-fn SpirvType* create_type_vector(EmissionContext* context, Type* type, SpirvType* member, int length) {
+fn SpirvType* create_type_vector(EmissionContext* context, Type* type, SpirvType* member, uint length) {
 	return create_type(context, &&{
 		.type = type,
 		.vector = {
@@ -189,7 +189,7 @@ fn SpirvType*? analyse_type(EmissionContext* context, Type* type, SourceLocId lo
 					context, 
 					type, 
 					analyse_type(context, type.array.base, loc, pointer_mode, &resolved),
-					type.array.len
+					(uint)type.array.len
 				)!;
 			default: return err::error(loc, "Unsupported type kind: %s", ast::const_name(type.type_kind))~;
 		}
