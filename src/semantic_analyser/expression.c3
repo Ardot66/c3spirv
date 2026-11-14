@@ -86,8 +86,7 @@ fn ExprType? analyse_cond(SemaContext* context, SpirvExpr* spirv_expr) {
 
 fn ExprType? analyse_ext_trunc(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprExtTrunc* trunc = &spirv_expr.expression.ext_trunc_expr;
-	return analyse_expression(context, trunc.inner).type!;
-	// type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
+	return expr_type(analyse_type(context, spirv_expr.expression.type, spirv_expr.expression.loc, LOGICAL))!;
 }
 
 fn ExprType? analyse_identifier(SemaContext* context, SpirvExpr* spirv_expr) {
@@ -99,7 +98,15 @@ fn ExprType? analyse_subscript(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprSubscript* subscript = &spirv_expr.expression.subscript_expr;
 
 	SpirvExpr* left = analyse_expression(context, ast::expr_ptr(subscript.expr))!;
-	analyse_expression(context, ast::expr_ptr(subscript.index.expr))!;
+
+	// c3c wants to expand all int types to 64 bit when indexing,
+	// but this isn't ideal for shaders so we ignore it here.
+	Expr* index_expr = ast::expr_ptr(subscript.index.expr);
+	while(index_expr.expr_kind == EXPR_EXT_TRUNC) {
+		index_expr = index_expr.ext_trunc_expr.inner;
+	}
+
+	spirv_expr.subscript.index = analyse_expression(context, index_expr)!;
 
 	ExprType type;
 	switch(left.type.ref.type.type_kind) {

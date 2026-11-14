@@ -39,14 +39,16 @@ fn void emit_entry_point(GenContext* context, SpirvEntryPoint* entry) {
 }
 
 fn void emit(GlobalContext* context) {
-	GenContext gen_context;
+	GenContext* gen_context = alloc::new(&context.vmem, GenContext);
 	gen_context.init(context);
+
+	context.gen_context = gen_context;
 
 	gen_context.init_op(CAPABILITY, Capability.SHADER);
 	gen_context.init_op(CAPABILITY, Capability.PHYSICAL_STORAGE_BUFFER_ADDRESSES);
 	gen_context.init_op(MEMORY_MODEL, AddressingModel.PHYSICAL_STORAGE_BUFFER_64, MemoryModel.GLSL450);
 
 	foreach(SpirvEntryPoint* entry : context.entry_points) {
-		emit_entry_point(&gen_context, entry);
+		emit_entry_point(gen_context, entry);
 	}
 }

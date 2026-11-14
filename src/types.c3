@@ -76,6 +76,9 @@ struct SpirvExpr {
 		struct access {
 			uint index;
 		}
+		struct subscript {
+			SpirvExpr* index;
+		}
 	}
 }
 

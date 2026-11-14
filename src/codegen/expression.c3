@@ -181,13 +181,13 @@ fn Id emit_const(GenContext* context, SpirvExpr* spirv_expr) {
 
 fn Id emit_trunc(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprExtTrunc* trunc = &spirv_expr.expression.ext_trunc_expr;
-	return emit_expression(context, trunc.inner).id;
-	// if(inner.type.ref == spirv_expr.type.ref) {
-	// 	id = expr_value(context, inner);
-	// } else {
-	// 	Opcode op = trunc.is_signed ? S_CONVERT : U_CONVERT;
-	// 	id = context.func_op(op, type_id(context, spirv_expr.type.ref), expr_value(context, inner));
-	// }
+	SpirvExpr* inner = emit_expression(context, trunc.inner);
+	if(inner.type.ref == spirv_expr.type.ref) {
+		return expr_value(context, inner);
+	} else {
+		Opcode op = trunc.is_signed ? S_CONVERT : U_CONVERT;
+		return context.func_op(op, type_id(context, spirv_expr.type.ref), expr_value(context, inner));
+	}
 }
 
 fn Id emit_identifier(GenContext* context, SpirvExpr* spirv_expr) {
@@ -199,17 +199,17 @@ fn Id emit_subscript(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprSubscript* subscript = &spirv_expr.expression.subscript_expr;
 
 	SpirvExpr* left = emit_expression(context, ast::expr_ptr(subscript.expr));
-	SpirvExpr* right = emit_expression(context, ast::expr_ptr(subscript.index.expr));
+	SpirvExpr* index = emit_spirv_expression(context, spirv_expr.subscript.index);
 
 	switch(left.type.ref.type.type_kind) {
 		case TYPE_VECTOR:
 			if(left.type.ref != left.type.real) {
-				return context.func_op(ACCESS_CHAIN, type_id(context, spirv_expr.type.real), left.id, expr_value(context, right));
+				return context.func_op(ACCESS_CHAIN, type_id(context, spirv_expr.type.real), left.id, expr_value(context, index));
 			} else {
-				return context.func_op(VECTOR_EXTRACT_DYNAMIC, type_id(context, spirv_expr.type.real), left.id, expr_value(context, right));
+				return context.func_op(VECTOR_EXTRACT_DYNAMIC, type_id(context, spirv_expr.type.real), left.id, expr_value(context, index));
 			}
 		case TYPE_POINTER: 
-			return context.func_op(PTR_ACCESS_CHAIN, type_id(context, spirv_expr.type.real), expr_value(context, left), expr_value(context, right));
+			return context.func_op(PTR_ACCESS_CHAIN, type_id(context, spirv_expr.type.real), expr_value(context, left), expr_value(context, index));
 		default: unreachable("Unsupported subscript kind: %s", ast::const_name(left.type.ref.type.type_kind));
 	}
 }
@@ -223,11 +223,9 @@ fn Id emit_unary(GenContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn SpirvExpr* emit_expression(GenContext* context, Expr* expression) @public {
-	SpirvExpr* spirv_expr = context.global.spirv_expressions.get(expression)!!;
-
+fn SpirvExpr* emit_spirv_expression(GenContext* context, SpirvExpr* spirv_expr) @public {
 	Id id;
-	switch(expression.expr_kind) {
+	switch(spirv_expr.expression.expr_kind) {
 		case EXPR_ACCESS_RESOLVED: id = emit_access(context, spirv_expr);
 		case EXPR_BINARY: id = emit_binary(context, spirv_expr);
 		case EXPR_CALL: id = emit_call(context, spirv_expr);
@@ -237,10 +235,14 @@ fn SpirvExpr* emit_expression(GenContext* context, Expr* expression) @public {
 		case EXPR_IDENTIFIER: id = emit_identifier(context, spirv_expr);
 		case EXPR_SUBSCRIPT: id = emit_subscript(context, spirv_expr);
 		case EXPR_UNARY: id = emit_unary(context, spirv_expr);
-		default: unreachable("Unsupported codegen expression: %s", ast::const_name(expression.expr_kind));
+		default: unreachable("Unsupported codegen expression: %s", ast::const_name(spirv_expr.expression.expr_kind));
 	}
 
 	assert(id);
 	spirv_expr.id = id;
 	return spirv_expr;
+}
+
+fn SpirvExpr* emit_expression(GenContext* context, Expr* expression) @public {
+	return emit_spirv_expression(context, context.global.spirv_expressions.get(expression))!!;
 }
