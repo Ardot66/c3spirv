@@ -6,10 +6,13 @@ fn void emit_sample_program() {
 	io::File out_file = file::open("sample.spv", "w")!!;
 	defer out_file.close();
 
-	EmissionContext context;
+	GlobalContext global_context;
 	const sz VMEM_SIZE = 1024 * 1024 * 64;
-	context.init(VMEM_SIZE);
-	defer context.free();
+	global_context.init(VMEM_SIZE);
+	defer global_context.free();
+
+	GenContext context;
+	context.init(&global_context);
 
 	// Declare the capabilities needed for this shader.
 	context.init_ops.op(&context, CAPABILITY, Capability.SHADER);

@@ -3,7 +3,7 @@ import ardot::c3c::ast, ardot::c3spirv;
 
 import std::io;
 
-fn ExprType? analyse_access(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_access(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprResolvedAccess* resolved = &spirv_expr.expression.access_resolved_expr;
 	SpirvExpr* parent = analyse_expression(context, resolved.parent)!;
 
@@ -26,7 +26,7 @@ fn ExprType? analyse_access(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return type;
 }
 
-fn ExprType? analyse_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_binary(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
 	SpirvExpr* left = analyse_expression(context, ast::expr_ptr(binary.left))!;
 	SpirvExpr* right = analyse_expression(context, ast::expr_ptr(binary.right))!;
@@ -76,7 +76,7 @@ fn ExprType? analyse_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn ExprType? analyse_cond(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_cond(SemaContext* context, SpirvExpr* spirv_expr) {
 	Expr*[] expressions = ast::vec(spirv_expr.expression.cond_expr);
 	foreach(cond : expressions[..^2]) {
 		analyse_expression(context, cond)!;
@@ -84,18 +84,18 @@ fn ExprType? analyse_cond(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return analyse_expression(context, expressions[^1]).type!;
 }
 
-fn ExprType? analyse_ext_trunc(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_ext_trunc(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprExtTrunc* trunc = &spirv_expr.expression.ext_trunc_expr;
 	return analyse_expression(context, trunc.inner).type!;
 	// type = expr_type(analyse_logical_type(context, expression.type, expression.loc))!;
 }
 
-fn ExprType? analyse_identifier(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_identifier(SemaContext* context, SpirvExpr* spirv_expr) {
 	SpirvDecl* declaration = spirv_expr.expression.ident_expr.backend_ref;
 	return declaration.variable.type;
 }
 
-fn ExprType? analyse_subscript(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_subscript(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprSubscript* subscript = &spirv_expr.expression.subscript_expr;
 
 	SpirvExpr* left = analyse_expression(context, ast::expr_ptr(subscript.expr))!;
@@ -114,7 +114,7 @@ fn ExprType? analyse_subscript(EmissionContext* context, SpirvExpr* spirv_expr) 
 	return type;
 }
 
-fn ExprType? analyse_unary(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_unary(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprUnary* unary = &spirv_expr.expression.unary_expr;
 	SpirvExpr* inner = analyse_expression(context, unary.expr)!;
 	switch(unary.operator) {
@@ -123,7 +123,7 @@ fn ExprType? analyse_unary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn SpirvType*? analyse_builtin_call(EmissionContext* context, SpirvExpr* spirv_expression, Expr*[] attribute_params) {
+fn SpirvType*? analyse_builtin_call(SemaContext* context, SpirvExpr* spirv_expression, Expr*[] attribute_params) {
 	Expr* expression = spirv_expression.expression;
 	ExprCall* call = &expression.call_expr;
 	ShaderBuiltin builtin = (ShaderBuiltin)eval_const_enum(attribute_params[0]);
@@ -149,7 +149,7 @@ fn SpirvType*? analyse_builtin_call(EmissionContext* context, SpirvExpr* spirv_e
 	}
 }
 
-fn ExprType? analyse_call(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn ExprType? analyse_call(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprCall* call = &spirv_expr.expression.call_expr;
 	Decl* declaration = ast::decl_ptr(call.func_ref);
 
@@ -161,11 +161,11 @@ fn ExprType? analyse_call(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn SpirvExpr*? analyse_expression(EmissionContext* context, Expr* expression) @public {
-	SpirvExpr* spirv_expr = alloc::new(&context.vmem, SpirvExpr, {
+fn SpirvExpr*? analyse_expression(SemaContext* context, Expr* expression) @public {
+	SpirvExpr* spirv_expr = alloc::new(&context.global.vmem, SpirvExpr, {
 		.expression = expression,
 	});
-	context.spirv_expressions[expression] = spirv_expr;
+	context.global.spirv_expressions[expression] = spirv_expr;
 
 	ExprType type;
 	switch(expression.expr_kind) {

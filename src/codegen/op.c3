@@ -42,7 +42,7 @@ fn bool Op.equals(&a, Op* b) {
 }
 
 // Append a given stream to the context's func_ops stream.
-fn void append_stream(EmissionContext* context, OpStream* stream) {
+fn void append_stream(GenContext* context, OpStream* stream) {
 	if(stream.first_op == null) {
 		return;
 	}
@@ -70,13 +70,13 @@ fn void Op.insert_stream(&self, OpStream* stream) {
 fn uint HashOp.hash(self) => Op.hash(self);
 fn bool HashOp.equals(a, HashOp b) @operator(==) => Op.equals(a, b);
 
-fn Id EmissionContext.generate_id(&self) {
+fn Id GenContext.generate_id(&self) {
 
 	defer self.id_count += 1;
 	return (Id)self.id_count;
 }
 
-fn void EmissionContext.print(&self) {
+fn void GenContext.print(&self) {
 	self.init_ops.print();
 	self.decoration_ops.print();
 	self.type_ops.print();
@@ -114,7 +114,7 @@ fn void OpStream.print(&self) => @pool() {
 	}
 }
 
-fn void? EmissionContext.write(&self, OutStream stream) {
+fn void? GenContext.write(&self, OutStream stream) {
 	uint[5] header = {
 		0x07230203, // SPIR-V magic number.
 		1 << 16 + 6 << 8, // SPIR-V target version number (1.6)
@@ -139,7 +139,7 @@ fn void? OpStream.write(&self, OutStream stream) {
 	}
 }
 
-fn Op* EmissionContext.create_op(&self, Opcode opcode, Id* result, uint[]... operands) {
+fn Op* GenContext.create_op(&self, Opcode opcode, Id* result, uint[]... operands) {
 	uint result_index = opcode.result_index();
 
 	sz opsize = 1 + (sz)(result_index > 0);
@@ -149,7 +149,7 @@ fn Op* EmissionContext.create_op(&self, Opcode opcode, Id* result, uint[]... ope
 
 	assert(opsize <= ushort::max);
 
-	Op* op = alloc::malloc(&self.vmem, Op::size + opsize * uint::size);
+	Op* op = alloc::malloc(&self.global.vmem, Op::size + opsize * uint::size);
 	op.next = null;
 
 	Id id = self.generate_id();
@@ -179,15 +179,15 @@ fn void OpStream.add_op(&self, Op* op) {
 	self.last_op = op;
 }
 
-fn Id OpStream.unique_op_raw(&self, EmissionContext* context, Opcode opcode, uint[]... operands) {
-	sz mark = context.vmem.mark();
+fn Id OpStream.unique_op_raw(&self, GenContext* context, Opcode opcode, uint[]... operands) {
+	sz mark = context.global.vmem.mark();
 
 	Id result @noinit;
 	Op* op = context.create_op(opcode, &result, ... operands);
 
 	Id? existing_type = context.op_map[(HashOp)op];
 	if(try existing_type) {
-		context.vmem.reset(mark);
+		context.global.vmem.reset(mark);
 		context.id_count -= 1;
 		return existing_type;
 	}
@@ -197,58 +197,58 @@ fn Id OpStream.unique_op_raw(&self, EmissionContext* context, Opcode opcode, uin
 	return result;
 }
 
-fn Id OpStream.op_raw(&self, EmissionContext* context, Opcode opcode, uint[]... operands) {
+fn Id OpStream.op_raw(&self, GenContext* context, Opcode opcode, uint[]... operands) {
 	Id result @noinit;
 	self.add_op(context.create_op(opcode, &result, ...operands));
 	return result;
 }
 
-fn Id OpStream.op(&self, EmissionContext* context, Opcode opcode, uint... operands) {
+fn Id OpStream.op(&self, GenContext* context, Opcode opcode, uint... operands) {
 	return self.op_raw(context, opcode, operands);
 }
 
-fn Id EmissionContext.init_op_raw(&self, Opcode opcode, uint[]... operands) {
+fn Id GenContext.init_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.init_ops.op_raw(self, opcode, ...operands);
 }
 
-fn Id EmissionContext.init_op(&self, Opcode opcode, uint... operands) {
+fn Id GenContext.init_op(&self, Opcode opcode, uint... operands) {
 	return self.init_ops.op_raw(self, opcode, operands);
 }
 
-fn Id EmissionContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
+fn Id GenContext.type_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.type_ops.unique_op_raw(self, opcode, ...operands);
 }
 
-fn Id EmissionContext.type_op(&self, Opcode opcode, uint... operands) {
+fn Id GenContext.type_op(&self, Opcode opcode, uint... operands) {
 	return self.type_ops.unique_op_raw(self, opcode, operands);
 }
 
-fn Id EmissionContext.decoration_op_raw(&self, Opcode opcode, uint[]... operands) {
+fn Id GenContext.decoration_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.decoration_ops.unique_op_raw(self, opcode, ...operands);
 }
 
-fn Id EmissionContext.decoration_op(&self, Opcode opcode, uint... operands) {
+fn Id GenContext.decoration_op(&self, Opcode opcode, uint... operands) {
 	return self.decoration_ops.unique_op_raw(self, opcode, operands);
 }
 
-fn Id EmissionContext.func_op_raw(&self, Opcode opcode, uint[]... operands) {
+fn Id GenContext.func_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.func_ops.op_raw(self, opcode, ...operands);
 }
 
-fn Id EmissionContext.func_op(&self, Opcode opcode, uint... operands) {
+fn Id GenContext.func_op(&self, Opcode opcode, uint... operands) {
 	return self.func_ops.op_raw(self, opcode, operands);
 }
 
-fn Id EmissionContext.func_var_op_raw(&self, Opcode opcode, uint[]... operands) {
+fn Id GenContext.func_var_op_raw(&self, Opcode opcode, uint[]... operands) {
 	return self.func_var_ops.op_raw(self, opcode, ...operands);
 }
 
-fn Id EmissionContext.func_var_op(&self, Opcode opcode, uint... operands) {
+fn Id GenContext.func_var_op(&self, Opcode opcode, uint... operands) {
 	return self.func_var_ops.op_raw(self, opcode, operands);
 }
 
 // Pushes an OpStream into the context's func_ops variable for the duration of the body.
-macro void @push_stream(EmissionContext* context, OpStream* stream; @body) {
+macro void @push_stream(GenContext* context, OpStream* stream; @body) {
 	OpStream* old_stream = context.func_ops;
 	context.func_ops = stream;
 	@body();

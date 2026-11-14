@@ -1,7 +1,7 @@
 module ardot::c3spirv::codegen @local;
 import ardot::c3spirv, ardot::c3c::ast;
 
-fn void emit_if(EmissionContext* context, Ast* statement) {
+fn void emit_if(GenContext* context, Ast* statement) {
 	AstIfStmt* if_statement = &statement.if_stmt;
 	SpirvExpr* condition = emit_expression(context, ast::expr_ptr(if_statement.cond));
 
@@ -29,7 +29,7 @@ fn void emit_if(EmissionContext* context, Ast* statement) {
 
 }
 
-fn void emit_statement(EmissionContext* context, Ast* statement) @public {
+fn void emit_statement(GenContext* context, Ast* statement) @public {
 	while(statement) {
 		switch(statement.ast_kind) {
 			case AST_COMPOUND_STMT: emit_statement(context, ast::ast_ptr(statement.compound_stmt.first_stmt));

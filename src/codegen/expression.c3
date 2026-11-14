@@ -1,7 +1,7 @@
 module ardot::c3spirv::codegen @local;
 import ardot::c3spirv, ardot::c3c::ast;
 
-fn Id emit_access(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_access(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprResolvedAccess* resolved = &spirv_expr.expression.access_resolved_expr;
 	SpirvExpr* parent = emit_expression(context, resolved.parent);
 
@@ -17,7 +17,7 @@ fn Id emit_access(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn Id emit_binary_assign(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_binary_assign(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
 	SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
 	SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
@@ -46,7 +46,7 @@ enum BinaryMode {
 	ASSIGN,
 }
 
-fn Id emit_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_binary(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
 
 	SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
@@ -118,13 +118,13 @@ fn Id emit_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return id;
 }
 
-fn void add_func_interface(EmissionContext* context, Id interface_id) {
+fn void add_func_interface(GenContext* context, Id interface_id) {
 	if(!context.func_interfaces.contains(interface_id)) {
 		context.func_interfaces.push(interface_id);
 	}
 }
 
-fn Id emit_builtin_call(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_builtin_call(GenContext* context, SpirvExpr* spirv_expr) {
 	ShaderBuiltin builtin = spirv_expr.call.builtin;
 	Expr* expression = spirv_expr.expression;
 	Id expr_type = type_id(context, spirv_expr.type.ref);
@@ -149,14 +149,14 @@ fn Id emit_builtin_call(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return id;
 }
 
-fn Id emit_call(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_call(GenContext* context, SpirvExpr* spirv_expr) {
 	if(spirv_expr.call.is_builtin) {
 		return emit_builtin_call(context, spirv_expr);
 	}
 	unreachable();
 }
 
-fn Id emit_cond(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_cond(GenContext* context, SpirvExpr* spirv_expr) {
 	Expr*[] expressions = ast::vec(spirv_expr.expression.cond_expr);
 	foreach(cond : expressions[..^2]) {
 		emit_expression(context, cond);
@@ -164,7 +164,7 @@ fn Id emit_cond(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return emit_expression(context, expressions[^1]).id;
 }
 
-fn Id emit_const(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_const(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprConst* const_expr = &spirv_expr.expression.const_expr;
 	Id type = type_id(context, spirv_expr.type.ref);
 	switch(const_expr.const_kind) {
@@ -179,7 +179,7 @@ fn Id emit_const(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn Id emit_trunc(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_trunc(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprExtTrunc* trunc = &spirv_expr.expression.ext_trunc_expr;
 	return emit_expression(context, trunc.inner).id;
 	// if(inner.type.ref == spirv_expr.type.ref) {
@@ -190,12 +190,12 @@ fn Id emit_trunc(EmissionContext* context, SpirvExpr* spirv_expr) {
 	// }
 }
 
-fn Id emit_identifier(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_identifier(GenContext* context, SpirvExpr* spirv_expr) {
 	SpirvDecl* spirv_decl = spirv_expr.expression.ident_expr.backend_ref;
 	return spirv_decl.variable.id;
 }
 
-fn Id emit_subscript(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_subscript(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprSubscript* subscript = &spirv_expr.expression.subscript_expr;
 
 	SpirvExpr* left = emit_expression(context, ast::expr_ptr(subscript.expr));
@@ -214,7 +214,7 @@ fn Id emit_subscript(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn Id emit_unary(EmissionContext* context, SpirvExpr* spirv_expr) {
+fn Id emit_unary(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprUnary* unary = &spirv_expr.expression.unary_expr;
 	SpirvExpr* inner = emit_expression(context, unary.expr);
 	switch(unary.operator) {
@@ -223,8 +223,8 @@ fn Id emit_unary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn SpirvExpr* emit_expression(EmissionContext* context, Expr* expression) @public {
-	SpirvExpr* spirv_expr = context.spirv_expressions.get(expression)!!;
+fn SpirvExpr* emit_expression(GenContext* context, Expr* expression) @public {
+	SpirvExpr* spirv_expr = context.global.spirv_expressions.get(expression)!!;
 
 	Id id;
 	switch(expression.expr_kind) {

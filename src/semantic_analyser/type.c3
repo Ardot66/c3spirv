@@ -2,13 +2,13 @@ module ardot::c3spirv::sema;
 import ardot::c3c::ast, ardot::c3spirv;
 import std::io;
 
-fn SpirvType* create_type(EmissionContext* context, SpirvType* type) {
+fn SpirvType* create_type(SemaContext* context, SpirvType* type) {
 	SpirvType*? existing = context.types[*type];
 	if(try existing) {
 		return existing;
 	}
 
-	SpirvType* new = alloc::alloc(&context.vmem, SpirvType);
+	SpirvType* new = alloc::alloc(&context.global.vmem, SpirvType);
 	mem::copy(new, type, SpirvType::size);
 	context.add_type(new);
 
@@ -24,17 +24,17 @@ fn SpirvType* create_type(EmissionContext* context, SpirvType* type) {
 	return new;
 }
 
-fn SpirvType* create_type_primitive(EmissionContext* context, Type* type) {
+fn SpirvType* create_type_primitive(SemaContext* context, Type* type) {
 	return create_type(context, &&{
 		.type = type
 	});
 }
 
-fn SpirvType* create_type_struct(EmissionContext* context, Type* type, SpirvType*[] members, bool block) {
+fn SpirvType* create_type_struct(SemaContext* context, Type* type, SpirvType*[] members, bool block) {
 	SpirvType struct_type = {
 		.type = type,
 		.structure = {
-			.members = alloc::alloc_array(&context.vmem, SpirvType*, members.len),
+			.members = alloc::alloc_array(&context.global.vmem, SpirvType*, members.len),
 			.block = block,
 		}
 	};
@@ -42,7 +42,7 @@ fn SpirvType* create_type_struct(EmissionContext* context, Type* type, SpirvType
 	return create_type(context, &struct_type);
 }
 
-fn SpirvType* create_type_vector(EmissionContext* context, Type* type, SpirvType* member, uint length) {
+fn SpirvType* create_type_vector(SemaContext* context, Type* type, SpirvType* member, uint length) {
 	return create_type(context, &&{
 		.type = type,
 		.vector = {
@@ -52,7 +52,7 @@ fn SpirvType* create_type_vector(EmissionContext* context, Type* type, SpirvType
 	});
 }
 
-fn SpirvType* create_type_pointer(EmissionContext* context, Type* type, StorageClass class, SpirvType* inner) {
+fn SpirvType* create_type_pointer(SemaContext* context, Type* type, StorageClass class, SpirvType* inner) {
 	return create_type(context, &&{
 		.type = type,
 		.pointer = {
@@ -63,8 +63,8 @@ fn SpirvType* create_type_pointer(EmissionContext* context, Type* type, StorageC
 }
 
 // Creates an unresolved copy of the given type to be fully determined during analysis.
-fn SpirvType* copy_type_unresolved(EmissionContext* context, SpirvType* type) {
-	SpirvType* new = alloc::alloc(&context.vmem, SpirvType);
+fn SpirvType* copy_type_unresolved(SemaContext* context, SpirvType* type) {
+	SpirvType* new = alloc::alloc(&context.global.vmem, SpirvType);
 	mem::copy(new, type, SpirvType::size);
 
 	new.next = null;
@@ -75,7 +75,7 @@ fn SpirvType* copy_type_unresolved(EmissionContext* context, SpirvType* type) {
 	return new;
 }
 
-fn void resolve_type_final(EmissionContext* context, SpirvType* type) {
+fn void resolve_type_final(SemaContext* context, SpirvType* type) {
 	if(type.resolved) {
 		return;
 	}
@@ -98,7 +98,7 @@ fn void resolve_type_final(EmissionContext* context, SpirvType* type) {
 	type.original = type;
 }
 
-fn void? resolve_type(EmissionContext* context, SpirvType* unresolved, SpirvType* resolved, SourceLocId loc) {
+fn void? resolve_type(SemaContext* context, SpirvType* unresolved, SpirvType* resolved, SourceLocId loc) {
 	if(!resolved.resolved) {
 		return err::error(loc, "Cannot assign an unresolved type.")~;
 	}
@@ -144,7 +144,7 @@ enum PointerMode {
 	UNRESOLVED,
 }
 
-fn SpirvType*? analyse_type(EmissionContext* context, Type* type, SourceLocId loc, PointerMode pointer_mode, bool* parent_resolved = null) {
+fn SpirvType*? analyse_type(SemaContext* context, Type* type, SourceLocId loc, PointerMode pointer_mode, bool* parent_resolved = null) {
 	bool is_primitive = false;
 	is_primitive |= type.type_kind >= TYPE_NUM_FIRST && type.type_kind <= TYPE_NUM_LAST;
 	is_primitive |= type.type_kind == TYPE_VOID || type.type_kind == TYPE_BOOL;

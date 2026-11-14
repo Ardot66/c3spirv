@@ -1,7 +1,7 @@
 module ardot::c3spirv::sema;
 import ardot::c3c::ast, ardot::c3spirv;
 
-fn void? analyse_statement(EmissionContext* context, Ast* statement) {
+fn void? analyse_statement(SemaContext* context, Ast* statement) {
 	while(statement) {
 		switch(statement.ast_kind) {
 			case AST_COMPOUND_STMT: 

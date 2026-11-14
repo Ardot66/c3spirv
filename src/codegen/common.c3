@@ -12,7 +12,7 @@ fn uint[] tstr_literal(String string) {
 	return literal;
 }
 
-fn Id expr_value(EmissionContext* context, SpirvExpr* expression) {
+fn Id expr_value(GenContext* context, SpirvExpr* expression) {
 	if(expression.type.ref != expression.type.real) {
 		return context.func_op(LOAD, type_id(context, expression.type.ref), expression.id, (uint)(MemoryOperands){.aligned}, 4);
 	} else {

@@ -3,7 +3,7 @@ import ardot::c3spirv, ardot::c3c::ast;
 
 import std::io;
 
-fn void emit_var(EmissionContext* context, SpirvDecl* spirv_decl) {
+fn void emit_var(GenContext* context, SpirvDecl* spirv_decl) {
 	VarDecl* var_decl = &spirv_decl.declaration.var_field;
 
 	ExprType type = spirv_decl.variable.type;
@@ -25,7 +25,7 @@ fn void emit_var(EmissionContext* context, SpirvDecl* spirv_decl) {
 	}
 }
 
-fn void emit_declaration(EmissionContext* context, Decl* declaration) @public {
+fn void emit_declaration(GenContext* context, Decl* declaration) @public {
 	SpirvDecl *spirv_decl = declaration.backend_ref;
 
 	switch(declaration.decl_kind) {

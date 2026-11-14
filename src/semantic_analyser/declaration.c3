@@ -3,7 +3,7 @@ import ardot::c3c::ast, ardot::c3spirv;
 
 import std::io;
 
-fn void? analyse_var(EmissionContext* context, SpirvDecl* spirv_decl) {
+fn void? analyse_var(SemaContext* context, SpirvDecl* spirv_decl) {
 	VarDecl* variable = &spirv_decl.declaration.var_field;
 
 	ExprType type = expr_type(analyse_type(context, spirv_decl.declaration.type, spirv_decl.declaration.loc, UNRESOLVED))!;
@@ -26,8 +26,8 @@ fn void? analyse_var(EmissionContext* context, SpirvDecl* spirv_decl) {
 	}
 }
 
-fn void? analyse_declaration(EmissionContext* context, Decl* declaration) @public {
-	SpirvDecl* spirv_decl = alloc::new(&context.vmem, SpirvDecl, {
+fn void? analyse_declaration(SemaContext* context, Decl* declaration) @public {
+	SpirvDecl* spirv_decl = alloc::new(&context.global.vmem, SpirvDecl, {
 		.declaration = declaration,
 	});
 	declaration.backend_ref = spirv_decl;

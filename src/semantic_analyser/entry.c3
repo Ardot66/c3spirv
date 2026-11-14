@@ -3,16 +3,16 @@ import ardot::c3c::ast, ardot::c3spirv;
 
 import std::io;
 
-fn void? analyse_entry_point(EmissionContext* context, Decl* decl) {
+fn void? analyse_entry_point(SemaContext* context, Decl* decl) {
 	Expr*[]? attribute_params = get_attribute(decl, SHADER);
 	if(catch attribute_params) {
 		return;
 	}
 
-	SpirvEntryPoint* entry_point = alloc::new(&context.vmem, SpirvEntryPoint, {
+	SpirvEntryPoint* entry_point = alloc::new(&context.global.vmem, SpirvEntryPoint, {
 		.declaration = decl,
 	});
-	context.entry_points.push(entry_point);
+	context.global.entry_points.push(entry_point);
 
 	FuncDecl* func_decl = &decl.func_decl;
 	Signature* signature = &func_decl.signature;
@@ -40,18 +40,21 @@ fn void? analyse_entry_point(EmissionContext* context, Decl* decl) {
 	analyse_statement(context, ast::ast_ptr(func_decl.body))!;
 }
 
-fn void? analyse(EmissionContext* context) {
+fn void? analyse(GlobalContext* context) {
+	SemaContext sema_context;
+	sema_context.init(context);
+	
 	foreach(Module* mod : ast::vec(ast::gc().module_list)) {
 		foreach(CompilationUnit* unit : ast::vec(mod.units)) {
 			foreach(Decl* function : ast::vec(unit.functions)) {
-				analyse_entry_point(context, function)!;
+				analyse_entry_point(&sema_context, function)!;
 			}
 		}
 	}
 
-	SpirvType* type = context.first_type;
+	SpirvType* type = sema_context.first_type;
 	while(type) {
-		resolve_type_final(context, type);
+		resolve_type_final(&sema_context, type);
 		type = type.next;
 	}
 }

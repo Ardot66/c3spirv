@@ -1,7 +1,7 @@
 module ardot::c3spirv::codegen;
 import ardot::c3spirv, ardot::c3c::ast;
 
-fn Id pointer_type_id(EmissionContext* context, SpirvType* type) {
+fn Id pointer_type_id(GenContext* context, SpirvType* type) {
 	SpirvType* inner = type.pointer.inner;
 	Id inner_id = type_id(context, inner);
 	Id pointer_id = context.type_op(TYPE_POINTER, type.pointer.class, inner_id);
@@ -11,7 +11,7 @@ fn Id pointer_type_id(EmissionContext* context, SpirvType* type) {
 	return pointer_id;
 }
 
-fn Id type_id(EmissionContext* context, SpirvType* type) {
+fn Id type_id(GenContext* context, SpirvType* type) {
 	assert(type.resolved);
 
 	// Make sure we're working with the original type to make things more efficient.

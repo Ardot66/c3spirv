@@ -21,7 +21,7 @@ fn int main(String[] args) @public
 	C3GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
     defer ast::free_ast();
 
-	EmissionContext context;
+	GlobalContext context;
 	const sz VMEM_SIZE = 1024 * 1024 * 64;
 	context.init(VMEM_SIZE);
 	defer context.free();

@@ -92,17 +92,31 @@ struct Op {
 // Needed so that Op* works correctly in hashmaps.
 typedef HashOp = inline Op*;
 
-struct EmissionContext {
+struct GlobalContext {
+	Vmem vmem;
+
 	List{SpirvEntryPoint*} entry_points;
+	HashMap{Expr*, SpirvExpr*} spirv_expressions;
+
+	GenContext* gen_context;
+}
+
+// Semantic analysis context.
+struct SemaContext {
+	GlobalContext* global;
+
+	HashMap{SpirvType, SpirvType*} types;
+
 	SpirvType* first_type;
 	SpirvType* last_type;
+}
 
-	Vmem vmem;
+struct GenContext {
+	GlobalContext* global;
+
 	uint id_count;
-	HashMap{SpirvType, SpirvType*} types;
-	HashMap{Expr*, SpirvExpr*} spirv_expressions;
+
 	HashMap{HashOp, Id} op_map;
-	// HashMap{HashOp, Id} global_ids;
 
 	OpStream init_ops;
 	OpStream decoration_ops;
@@ -123,21 +137,32 @@ fn bool SpirvType.equals(SpirvType a, SpirvType b) => byte_view(&a, SpirvType::s
 
 fn uint Expr.hash(Expr* self) => void*.hash(self);
 
-fn void EmissionContext.init(&self, sz vmem_size) {
+fn void GlobalContext.init(&self, sz vmem_size) {
 	self.vmem.init(vmem_size)!!;
 	self.entry_points.init(&self.vmem);
-	self.types.init(&self.vmem);
-	self.func_interfaces.init(&self.vmem);
-
-	self.id_count = 1;
-	self.func_ops = &self.top_func_ops;
 }
 
-fn void EmissionContext.free(&self) {
+fn void GlobalContext.free(&self) {
 	self.vmem.free();
 }
 
-fn void EmissionContext.add_type(&self, SpirvType* type) {
+fn void? GlobalContext.write(&self, OutStream stream) {
+	return self.gen_context.write(stream);
+}
+
+fn void SemaContext.init(&self, GlobalContext* context) {
+	self.global = context;
+	self.types.init(&context.vmem);
+}
+
+fn void GenContext.init(&self, GlobalContext* context) {
+	self.global = context;
+	self.func_interfaces.init(&context.vmem);
+	self.func_ops = &self.top_func_ops;
+	self.id_count = 1;
+}
+
+fn void SemaContext.add_type(&self, SpirvType* type) {
 	if(!self.first_type) {
 		self.first_type = type;
 		self.last_type = type;

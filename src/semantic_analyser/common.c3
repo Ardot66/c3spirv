@@ -27,7 +27,7 @@ fn bool types_equal(SpirvType* a, SpirvType* b) {
 
 fn bool ExprType.is_ref(self) => !types_equal(self.real, self.ref);
 
-fn void? analyse_assignment(EmissionContext* context, ExprType variable, ExprType value, SourceLocId loc) {
+fn void? analyse_assignment(SemaContext* context, ExprType variable, ExprType value, SourceLocId loc) {
 	if(!variable.is_ref()) {
 		return err::error(loc, "Cannot assign to this value, it is not a reference.")~;
 	}

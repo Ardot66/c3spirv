@@ -1,7 +1,7 @@
 module ardot::c3spirv::codegen;
 import ardot::c3spirv, ardot::c3c::ast;
 
-fn void emit_entry_point(EmissionContext* context, SpirvEntryPoint* entry) {
+fn void emit_entry_point(GenContext* context, SpirvEntryPoint* entry) {
 	Id void_type = context.type_op(TYPE_VOID);
 	Id func_type = context.type_op(TYPE_FUNCTION, void_type);
 
@@ -38,12 +38,15 @@ fn void emit_entry_point(EmissionContext* context, SpirvEntryPoint* entry) {
 	context.func_interfaces.clear();
 }
 
-fn void emit(EmissionContext* context) {
-	context.init_op(CAPABILITY, Capability.SHADER);
-	context.init_op(CAPABILITY, Capability.PHYSICAL_STORAGE_BUFFER_ADDRESSES);
-	context.init_op(MEMORY_MODEL, AddressingModel.PHYSICAL_STORAGE_BUFFER_64, MemoryModel.GLSL450);
+fn void emit(GlobalContext* context) {
+	GenContext gen_context;
+	gen_context.init(context);
+
+	gen_context.init_op(CAPABILITY, Capability.SHADER);
+	gen_context.init_op(CAPABILITY, Capability.PHYSICAL_STORAGE_BUFFER_ADDRESSES);
+	gen_context.init_op(MEMORY_MODEL, AddressingModel.PHYSICAL_STORAGE_BUFFER_64, MemoryModel.GLSL450);
 
 	foreach(SpirvEntryPoint* entry : context.entry_points) {
-		emit_entry_point(context, entry);
+		emit_entry_point(&gen_context, entry);
 	}
 }
