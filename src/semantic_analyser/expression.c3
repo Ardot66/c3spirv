@@ -30,18 +30,49 @@ fn ExprType? analyse_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
 	SpirvExpr* left = analyse_expression(context, ast::expr_ptr(binary.left))!;
 	SpirvExpr* right = analyse_expression(context, ast::expr_ptr(binary.right))!;
+
 	switch(binary.operator) {
-		case BINARYOP_GT:
-		case BINARYOP_GE:
-		case BINARYOP_LT:
-		case BINARYOP_LE:
-		case BINARYOP_NE:
+		case BINARYOP_MULT:
+		case BINARYOP_SUB:
+		case BINARYOP_ADD:
+		case BINARYOP_DIV:
+		case BINARYOP_MOD:
+		case BINARYOP_SHR:
+		case BINARYOP_SHL:
+		case BINARYOP_BIT_OR:
+		case BINARYOP_BIT_XOR:
+		case BINARYOP_BIT_AND:
+			return expr_deref(right.type);
+		case BINARYOP_AND:
+		case BINARYOP_OR:
 		case BINARYOP_EQ:
+		case BINARYOP_NE:
+		case BINARYOP_LT:
+		case BINARYOP_GT:
+		case BINARYOP_LE:
+		case BINARYOP_GE:
 			return expr_type(create_type_primitive(context, c3spirv::bool_type));
-		case BINARYOP_ASSIGN:
+		case BINARYOP_VEC_EQ:
+		case BINARYOP_VEC_NE:
+		case BINARYOP_VEC_LT:
+		case BINARYOP_VEC_GT:
+		case BINARYOP_VEC_LE:
+		case BINARYOP_VEC_GE:
+			return expr_type(analyse_type(context, spirv_expr.expression.type, spirv_expr.expression.loc, LOGICAL));
+		case BINARYOP_ADD_ASSIGN:
+		case BINARYOP_BIT_AND_ASSIGN:
+		case BINARYOP_BIT_OR_ASSIGN:
+		case BINARYOP_BIT_XOR_ASSIGN:
+		case BINARYOP_DIV_ASSIGN:
+		case BINARYOP_MOD_ASSIGN:
+		case BINARYOP_MULT_ASSIGN:
+		case BINARYOP_SHR_ASSIGN:
+		case BINARYOP_SHL_ASSIGN:
+		case BINARYOP_SUB_ASSIGN:
+		case BINARYOP_ASSIGN: 
 			analyse_assignment(context, left.type, right.type, spirv_expr.expression.loc)!;
-			nextcase default;
-		default: return expr_deref(right.type);
+			return expr_deref(right.type);
+		default: return err::error(spirv_expr.expression.loc, "Unsupported binary op kind: %s", ast::const_name(binary.operator))~;
 	}
 }
 

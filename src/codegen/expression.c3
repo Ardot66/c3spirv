@@ -17,18 +17,6 @@ fn Id emit_access(EmissionContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn Id emit_binary_math(EmissionContext* context, SpirvExpr* spirv_expr, Opcode op) {
-	ExprBinary* binary = &spirv_expr.expression.binary_expr;
-	SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
-	SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
-	return context.func_op(
-		op, 
-		type_id(context, spirv_expr.type.ref), 
-		expr_value(context, left), 
-		expr_value(context, right
-	));
-}
-
 fn Id emit_binary_assign(EmissionContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
 	SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
@@ -37,16 +25,97 @@ fn Id emit_binary_assign(EmissionContext* context, SpirvExpr* spirv_expr) {
 	return right.id;
 }
 
+fn Opcode num_op(TypeKind kind, Opcode floating, Opcode unsigned, Opcode signed = INVALID) {
+	if(kind >= TYPE_FLOAT_FIRST && kind <= TYPE_FLOAT_LAST) {
+		return floating;
+	} else if(kind >= TYPE_UINT_FIRST && kind <= TYPE_UINT_LAST) {
+		return unsigned;
+	} else if(kind >= TYPE_INT_FIRST && kind <= TYPE_INT_LAST) {
+		if(signed == INVALID) {
+			return unsigned;
+		}
+		return signed;
+	}
+
+	unreachable();
+}
+
+enum BinaryMode {
+	START,
+	MATH,
+	ASSIGN,
+}
+
 fn Id emit_binary(EmissionContext* context, SpirvExpr* spirv_expr) {
 	ExprBinary* binary = &spirv_expr.expression.binary_expr;
 
-	// Will need to specialize this to handle signed, unsigned, and floats.
-	switch(binary.operator) {
-		case BINARYOP_LT: return emit_binary_math(context, spirv_expr, U_LESS_THAN);
-		case BINARYOP_MULT: return emit_binary_math(context, spirv_expr, F_MUL);
-		case BINARYOP_ASSIGN: return emit_binary_assign(context, spirv_expr);
-		default: unreachable("Unsupported binary op kind: %s", ast::const_name(binary.operator));
+	SpirvExpr* right = emit_expression(context, ast::expr_ptr(binary.right));
+	SpirvExpr* left = emit_expression(context, ast::expr_ptr(binary.left));
+
+	TypeKind kind = right.type.ref.kind;
+	Opcode op;
+	bool assign;
+	Id id;
+	switch OUTER: (BinaryMode.START) {
+		case START:
+			switch(binary.operator) {
+				case BINARYOP_MULT: op = num_op(kind, F_MUL, I_MUL); nextcase OUTER:MATH;
+				case BINARYOP_SUB: op = num_op(kind, F_SUB, I_SUB); nextcase OUTER:MATH;
+				case BINARYOP_ADD: op = num_op(kind, F_ADD, I_ADD); nextcase OUTER:MATH;
+				case BINARYOP_DIV: op = num_op(kind, F_DIV, U_DIV, S_DIV); nextcase OUTER:MATH;
+				case BINARYOP_MOD: op = num_op(kind, F_MOD, U_MOD, S_MOD); nextcase OUTER:MATH;
+				case BINARYOP_SHR: op = num_op(kind, INVALID, SHIFT_RIGHT_LOGICAL); nextcase OUTER:MATH;
+				case BINARYOP_SHL: op = num_op(kind, INVALID, SHIFT_LEFT_LOGICAL); nextcase OUTER:MATH;
+				case BINARYOP_BIT_OR: op = num_op(kind, INVALID, BITWISE_OR); nextcase OUTER:MATH;
+				case BINARYOP_BIT_XOR: op = num_op(kind, INVALID, BITWISE_XOR); nextcase OUTER:MATH;
+				case BINARYOP_BIT_AND: op = num_op(kind, INVALID, BITWISE_AND); nextcase OUTER:MATH;
+				case BINARYOP_AND: op = num_op(kind, INVALID, LOGICAL_AND); nextcase OUTER:MATH;
+				case BINARYOP_OR: op = num_op(kind, INVALID, LOGICAL_OR); nextcase OUTER:MATH;
+				case BINARYOP_EQ: op = num_op(kind, F_UNORD_EQUAL, I_EQUAL); nextcase OUTER:MATH;
+				case BINARYOP_NE: op = num_op(kind, F_UNORD_NOT_EQUAL, I_NOT_EQUAL); nextcase OUTER:MATH;
+				case BINARYOP_LT: op = num_op(kind, F_UNORD_LESS_THAN, U_LESS_THAN, S_LESS_THAN); nextcase OUTER:MATH;
+				case BINARYOP_GT: op = num_op(kind, F_UNORD_GREATER_THAN, U_GREATER_THAN, S_GREATER_THAN); nextcase OUTER:MATH;
+				case BINARYOP_LE: op = num_op(kind, F_UNORD_LESS_THAN_EQUAL, U_LESS_THAN_EQUAL, S_LESS_THAN_EQUAL); nextcase OUTER:MATH;
+				case BINARYOP_GE: op = num_op(kind, F_UNORD_GREATER_THAN_EQUAL, U_GREATER_THAN_EQUAL, S_GREATER_THAN_EQUAL); nextcase OUTER:MATH;
+
+				case BINARYOP_VEC_EQ: op = num_op(kind, F_UNORD_EQUAL, I_EQUAL); nextcase OUTER:MATH;
+				case BINARYOP_VEC_NE: op = num_op(kind, F_UNORD_NOT_EQUAL, I_NOT_EQUAL); nextcase OUTER:MATH;
+				case BINARYOP_VEC_LT: op = num_op(kind, F_UNORD_LESS_THAN, U_LESS_THAN, S_LESS_THAN); nextcase OUTER:MATH;
+				case BINARYOP_VEC_GT: op = num_op(kind, F_UNORD_GREATER_THAN, U_GREATER_THAN, S_GREATER_THAN); nextcase OUTER:MATH;
+				case BINARYOP_VEC_LE: op = num_op(kind, F_UNORD_LESS_THAN_EQUAL, U_LESS_THAN_EQUAL, S_LESS_THAN_EQUAL); nextcase OUTER:MATH;
+				case BINARYOP_VEC_GE: op = num_op(kind, F_UNORD_GREATER_THAN_EQUAL, U_GREATER_THAN_EQUAL, S_GREATER_THAN_EQUAL); nextcase OUTER:MATH;
+
+				case BINARYOP_ADD_ASSIGN: assign = true; nextcase BINARYOP_ADD;
+				case BINARYOP_BIT_AND_ASSIGN: assign = true; nextcase BINARYOP_BIT_AND;
+				case BINARYOP_BIT_OR_ASSIGN: assign = true; nextcase BINARYOP_BIT_OR;
+				case BINARYOP_BIT_XOR_ASSIGN: assign = true; nextcase BINARYOP_BIT_XOR;
+				case BINARYOP_DIV_ASSIGN: assign = true; nextcase BINARYOP_DIV;
+				case BINARYOP_MOD_ASSIGN: assign = true; nextcase BINARYOP_MOD;
+				case BINARYOP_MULT_ASSIGN: assign = true; nextcase BINARYOP_MULT;
+				case BINARYOP_SHR_ASSIGN: assign = true; nextcase BINARYOP_SHR;
+				case BINARYOP_SHL_ASSIGN: assign = true; nextcase BINARYOP_SHL;
+				case BINARYOP_SUB_ASSIGN: assign = true; nextcase BINARYOP_SUB;
+
+				case BINARYOP_ASSIGN: 
+					id = expr_value(context, right);
+					nextcase OUTER:ASSIGN;
+				default: unreachable("Unsupported binary op kind: %s", ast::const_name(binary.operator));
+			}
+		case MATH:	
+			id = context.func_op(
+				op, 
+				type_id(context, spirv_expr.type.ref), 
+				expr_value(context, left), 
+				expr_value(context, right
+			));
+			if(assign) {
+				nextcase ASSIGN;
+			}
+		case ASSIGN:
+			context.func_op(STORE, left.id, id, (uint)(MemoryOperands){.aligned}, 4);
 	}
+
+	return id;
 }
 
 fn void add_func_interface(EmissionContext* context, Id interface_id) {

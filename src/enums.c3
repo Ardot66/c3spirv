@@ -38,8 +38,27 @@ constdef Opcode : ushort {
 	U_CONVERT = 113,
 	S_CONVERT = 114,
 	BITCAST = 124,
+	S_NEGATE = 126,
+	F_NEGATE = 127,
+	I_ADD = 128,
+	F_ADD = 129,
+	I_SUB = 130,
+	F_SUB = 131,
 	I_MUL = 132,
 	F_MUL = 133,
+	U_DIV = 134,
+	S_DIV = 135,
+	F_DIV = 136,
+	U_MOD = 137,
+	S_REM = 138,
+	S_MOD = 139,
+	F_REM = 140,
+	F_MOD = 141,
+	LOGICAL_EQUAL = 164,
+	LOGICAL_NOT_EQUAL = 165,
+	LOGICAL_OR = 166,
+	LOGICAL_AND = 167,
+	LOGICAL_NOT = 168,
 	I_EQUAL = 170,
 	I_NOT_EQUAL = 171,
 	U_GREATER_THAN = 172,
@@ -50,6 +69,19 @@ constdef Opcode : ushort {
 	S_LESS_THAN = 177,
 	U_LESS_THAN_EQUAL = 178,
 	S_LESS_THAN_EQUAL = 179,
+	F_UNORD_EQUAL = 181,
+	F_UNORD_NOT_EQUAL = 183,
+	F_UNORD_LESS_THAN = 185,
+	F_UNORD_GREATER_THAN = 187,
+	F_UNORD_LESS_THAN_EQUAL = 189,
+	F_UNORD_GREATER_THAN_EQUAL = 191,
+	SHIFT_RIGHT_LOGICAL = 194,
+	SHIFT_RIGHT_ARITHMETIC = 195,
+	SHIFT_LEFT_LOGICAL = 196,
+	BITWISE_OR = 197,
+	BITWISE_XOR = 198,
+	BITWISE_AND = 199,
+	BITWISE_NOT = 200,
 	LOOP_MERGE = 246,
 	SELECTION_MERGE = 247,
 	LABEL = 248,
@@ -57,6 +89,7 @@ constdef Opcode : ushort {
 	BRANCH_CONDITIONAL = 250,
 	SWITCH = 251,
 	RETURN = 253,
+	INVALID = ushort::max,
 }
 
 <*
@@ -111,8 +144,27 @@ fn uint Opcode.result_index(self) {
 		case U_CONVERT:
 		case S_CONVERT:
 		case BITCAST:
+		case S_NEGATE:
+		case F_NEGATE:
+		case I_ADD:
+		case F_ADD:
+		case I_SUB:
+		case F_SUB:
 		case I_MUL:
 		case F_MUL:
+		case U_DIV:
+		case S_DIV:
+		case F_DIV:
+		case U_MOD:
+		case S_REM:
+		case S_MOD:
+		case F_REM:
+		case F_MOD:
+		case LOGICAL_EQUAL:
+		case LOGICAL_NOT_EQUAL:
+		case LOGICAL_OR:
+		case LOGICAL_AND:
+		case LOGICAL_NOT:
 		case I_EQUAL:
 		case I_NOT_EQUAL:
 		case U_GREATER_THAN:
@@ -123,6 +175,19 @@ fn uint Opcode.result_index(self) {
 		case S_LESS_THAN:
 		case U_LESS_THAN_EQUAL:
 		case S_LESS_THAN_EQUAL:
+		case F_UNORD_EQUAL:
+		case F_UNORD_NOT_EQUAL:
+		case F_UNORD_LESS_THAN:
+		case F_UNORD_GREATER_THAN:
+		case F_UNORD_LESS_THAN_EQUAL:
+		case F_UNORD_GREATER_THAN_EQUAL:
+		case SHIFT_RIGHT_LOGICAL:
+		case SHIFT_RIGHT_ARITHMETIC:
+		case SHIFT_LEFT_LOGICAL:
+		case BITWISE_OR:
+		case BITWISE_XOR:
+		case BITWISE_AND:
+		case BITWISE_NOT:
 			return 2;
 	}
 
