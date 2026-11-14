@@ -18,7 +18,7 @@ fn int main(String[] args) @public
 {
 	// emit_sample_program();
 
-	GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
+	C3GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
     defer ast::free_ast();
 
 	EmissionContext context;
