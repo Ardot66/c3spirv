@@ -45,6 +45,9 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// They should work in macros to allow helper creation.
 	uint[<3>] invocation_id = c3spirv::get_global_invocation_id();
 
+	// uint[<3>] test_values;
+	// bool[<3>] result = test_values.comp_le(invocation_id);
+
 	// Calling a function that takes pointer parameters will be a little complex on the whole,
 	// but I think the simplest way to manage it is that the function will be emitted once
 	// for every unique combination of storage classes that it gets called with.
@@ -61,18 +64,24 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// This should just create an OpVariable and load from the invocation_id, pretty simple.
 	uint id = invocation_id.x;
 
+	if (id >= root.count) {
+		return;
+	}
+
+	root.output[id] += root.input[id] * 2f + 1;
+
 	// Branches are a little complex, but I think it should be possible to represent them well.
 	// Will need to do some more experimentation here.
-	if(id < root.count) {
-		// As members of the root, output and input should implicitly be of the PhysicalStorageBuffer
-		// storage class. Their array stride should just be equal to their size, and to make things
-		// easier it may be best to always decorate pointers with array stride, even if it's never
-		// used. The other option is to only decorate with array stride when necessary, which is
-		// probably possible.
+	// if(id < root.count) {
+	// 	// As members of the root, output and input should implicitly be of the PhysicalStorageBuffer
+	// 	// storage class. Their array stride should just be equal to their size, and to make things
+	// 	// easier it may be best to always decorate pointers with array stride, even if it's never
+	// 	// used. The other option is to only decorate with array stride when necessary, which is
+	// 	// probably possible.
 
-		// The constant 2f here should be unique (to make the SPIR-V smaller hopefully), and our type_op
-		// system should handle that neatly. There is the matter of 64 bit floating point, but handling
-		// that is a whole other can of worms.
-		root.output[id] = root.input[id] * 2f;
-	}
+	// 	// The constant 2f here should be unique (to make the SPIR-V smaller hopefully), and our type_op
+	// 	// system should handle that neatly. There is the matter of 64 bit floating point, but handling
+	// 	// that is a whole other can of worms.
+	// 	root.output[id] += root.input[id] * 2f + 1;
+	// }
 }

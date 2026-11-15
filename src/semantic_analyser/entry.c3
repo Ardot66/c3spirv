@@ -9,11 +9,6 @@ fn void? analyse_entry_point(SemaContext* context, Decl* decl) {
 		return;
 	}
 
-	SpirvEntryPoint* entry_point = alloc::new(&context.global.vmem, SpirvEntryPoint, {
-		.declaration = decl,
-	});
-	context.global.entry_points.push(entry_point);
-
 	FuncDecl* func_decl = &decl.func_decl;
 	Signature* signature = &func_decl.signature;
 
@@ -23,6 +18,11 @@ fn void? analyse_entry_point(SemaContext* context, Decl* decl) {
 	} else if(ast::vec_size(signature.params) > 0) {
 		return err::error(decl.loc, "Shader entry point must have no parameters.")~;
 	}
+
+	SpirvEntryPoint* entry_point = alloc::new(&context.global.vmem, SpirvEntryPoint, {
+		.declaration = decl,
+	});
+	context.global.entry_points.push(entry_point);
 
 	ExecutionModel execution_model = (ExecutionModel)eval_const_int(attribute_params[0]);
 	entry_point.model = execution_model;
@@ -37,7 +37,16 @@ fn void? analyse_entry_point(SemaContext* context, Decl* decl) {
 			entry_point.compute.group_size = group_size;
 	}
 
-	analyse_statement(context, ast::ast_ptr(func_decl.body))!;
+	SemaStackFrame frame = {
+		.kind = FUNCTION,
+		.function = {
+			.return_type = analyse_type(context, rtype_info.type, decl.loc, LOGICAL)!,
+		},
+	};
+
+	context.@push_frame(&frame) {
+		analyse_statement(context, ast::ast_ptr(func_decl.body))!;
+	};
 }
 
 fn void? analyse(GlobalContext* context) {

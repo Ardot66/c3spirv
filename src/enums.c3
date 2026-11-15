@@ -89,6 +89,7 @@ constdef Opcode : ushort {
 	BRANCH_CONDITIONAL = 250,
 	SWITCH = 251,
 	RETURN = 253,
+	RETURN_VALUE = 254,
 	INVALID = ushort::max,
 }
 
@@ -108,12 +109,13 @@ fn uint Opcode.result_index(self) {
 		case STORE:
 		case DECORATE:
 		case MEMBER_DECORATE:
-		case RETURN:
 		case LOOP_MERGE:
 		case SELECTION_MERGE:
 		case BRANCH:
 		case BRANCH_CONDITIONAL:
 		case SWITCH:
+		case RETURN:
+		case RETURN_VALUE:
 			return 0;
 		case TYPE_VOID:
 		case TYPE_BOOL:

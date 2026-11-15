@@ -47,6 +47,17 @@ struct SpirvType {
 	}
 }
 
+struct SpirvFlowCommon {
+	bool returns;
+}
+
+struct SpirvAst {
+	Ast* statement;
+	union {
+		SpirvFlowCommon flow;
+	}
+}
+
 struct SpirvDecl {
 	Decl* declaration;
 	union {
@@ -54,6 +65,10 @@ struct SpirvDecl {
 			ExprType type;
 			Id pointer_type_id;
 			Id id;
+		}
+		struct function {
+			Id return_var;
+			Id return_label;
 		}
 	}
 }
@@ -100,8 +115,32 @@ struct GlobalContext {
 
 	List{SpirvEntryPoint*} entry_points;
 	HashMap{Expr*, SpirvExpr*} spirv_expressions;
+	HashMap{Ast*, SpirvAst*} spirv_statements;
 
 	GenContext* gen_context;
+}
+
+enum SemaStackFrameKind {
+	MACRO,
+	CONTROL_FLOW,
+	FUNCTION,
+}
+
+struct SemaStackFrame {
+	SemaStackFrame* parent;
+	SemaStackFrameKind kind;
+
+	union {
+		struct macro_frame {
+			SpirvType* return_type;
+		}
+		struct function {
+			SpirvType* return_type;
+		}
+		struct flow {
+			SpirvAst* statement;
+		}
+	}
 }
 
 // Semantic analysis context.
@@ -112,6 +151,8 @@ struct SemaContext {
 
 	SpirvType* first_type;
 	SpirvType* last_type;
+
+	SemaStackFrame* frame;
 }
 
 struct GenContext {
@@ -139,6 +180,7 @@ fn uint SpirvType.hash(self) => byte_view(&self, SpirvType::size).hash();
 fn bool SpirvType.equals(SpirvType a, SpirvType b) => byte_view(&a, SpirvType::size) == byte_view(&b, SpirvType::size);
 
 fn uint Expr.hash(Expr* self) => void*.hash(self);
+fn uint Ast.hash(Ast* self) => void*.hash(self);
 
 fn void GlobalContext.init(&self, sz vmem_size) {
 	self.vmem.init(vmem_size)!!;
@@ -163,15 +205,4 @@ fn void GenContext.init(&self, GlobalContext* context) {
 	self.func_interfaces.init(&context.vmem);
 	self.func_ops = &self.top_func_ops;
 	self.id_count = 1;
-}
-
-fn void SemaContext.add_type(&self, SpirvType* type) {
-	if(!self.first_type) {
-		self.first_type = type;
-		self.last_type = type;
-		return;
-	}
-
-	self.last_type.next = type;
-	self.last_type = type;
 }

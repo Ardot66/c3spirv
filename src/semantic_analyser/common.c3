@@ -119,3 +119,44 @@ fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 	return NOT_FOUND~;
 }
 
+fn void SemaContext.add_type(&self, SpirvType* type) {
+	if(!self.first_type) {
+		self.first_type = type;
+		self.last_type = type;
+		return;
+	}
+
+	self.last_type.next = type;
+	self.last_type = type;
+}
+
+macro void SemaContext.@push_frame(&self, SemaStackFrame* frame; @body()) {
+	frame.parent = self.frame;
+	self.frame = frame;
+
+	@body();
+
+	self.frame = frame.parent;
+}
+
+fn bool SpirvAst.is_flow(&self) {
+	switch(self.statement.ast_kind) {
+		case AST_IF_STMT:
+		case AST_SWITCH_STMT:
+		case AST_FOR_STMT:
+		case AST_FOREACH_STMT:
+			return true;
+		default: return false;
+	}
+}
+
+fn SemaStackFrame* SemaStackFrame.find_function(&frame) {
+	while(frame) {
+		if(frame.kind == FUNCTION) {
+			return frame;
+		}
+		frame = frame.parent;
+	}
+
+	unreachable();
+}
