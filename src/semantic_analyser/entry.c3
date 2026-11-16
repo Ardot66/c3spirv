@@ -38,13 +38,12 @@ fn void? analyse_entry_point(SemaContext* context, Decl* decl) {
 	}
 
 	SemaStackFrame frame = {
-		.kind = FUNCTION,
 		.function = {
 			.return_type = analyse_type(context, rtype_info.type, decl.loc, LOGICAL)!,
 		},
 	};
 
-	context.@push_frame(&frame) {
+	context.@push_frame(&frame, FUNCTION, &entry_point.label) {
 		analyse_statement(context, ast::ast_ptr(func_decl.body))!;
 	};
 }

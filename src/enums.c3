@@ -82,6 +82,7 @@ constdef Opcode : ushort {
 	BITWISE_XOR = 198,
 	BITWISE_AND = 199,
 	BITWISE_NOT = 200,
+	PHI = 245,
 	LOOP_MERGE = 246,
 	SELECTION_MERGE = 247,
 	LABEL = 248,
@@ -190,6 +191,7 @@ fn uint Opcode.result_index(self) {
 		case BITWISE_XOR:
 		case BITWISE_AND:
 		case BITWISE_NOT:
+		case PHI:
 			return 2;
 	}
 

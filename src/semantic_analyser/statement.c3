@@ -3,19 +3,69 @@ import ardot::c3c::ast, ardot::c3spirv;
 
 import std::io;
 
+fn void? analyse_block_exit(SemaContext* context, SpirvAst* spirv_stmt) {
+	AstReturnStmt* return_s = &spirv_stmt.statement.return_stmt;
+
+	SpirvExpr* expression = null; 
+	if(return_s.expr) {
+		expression = analyse_expression(context, return_s.expr)!;
+	}
+
+	SpirvExpr* block;
+	for(SemaStackFrame* frame = context.frame; frame; frame = frame.parent) {
+		if(frame.kind == MACRO) {
+			// Need to resolve the return type here if possible to ensure that the function
+			// doesn't try to return incompatible types in different places.
+			if(expression) {
+				resolve_type(context, frame.macro_frame.return_type, expression.type.ref, expression.expression.loc)!;
+			}
+			block = frame.macro_frame.block;
+			block.macro_block.returns.push(spirv_stmt);
+			break;
+		}
+	}
+
+	spirv_stmt.block_return.block = block;
+
+	bool first_flow = true;
+	for(SemaStackFrame* frame = context.frame; frame; frame = frame.parent) {
+		if(frame.kind == CONTROL_FLOW) {
+			if(first_flow) {
+				first_flow = false;
+				spirv_stmt.block_return.label = frame.label;
+			}
+
+			frame.flow.statement.flow = {
+				.macro_return = true,
+				.macro_block = block,
+			};
+		} else if(frame.kind == MACRO) {
+			if(first_flow) {
+				spirv_stmt.block_return.label = frame.label;
+			}
+			break;
+		}
+	}
+}
+
 fn void? analyse_if(SemaContext* context, SpirvAst* spirv_stmt) {
 	AstIfStmt* if_statement = &spirv_stmt.statement.if_stmt;
 	SemaStackFrame frame = {
-		.kind = CONTROL_FLOW, 
 		.flow = {
 			.statement = spirv_stmt
 		},
 	};
-	context.@push_frame(&frame) {
-		analyse_expression(context, ast::expr_ptr(if_statement.cond))!;
+
+	analyse_expression(context, ast::expr_ptr(if_statement.cond))!;
+	context.@push_frame(&frame, CONTROL_FLOW, &spirv_stmt.if_s.then_label) {
 		analyse_statement(context, ast::ast_ptr(if_statement.then_body))!;
+	};
+
+	context.@push_frame(&frame, CONTROL_FLOW, &spirv_stmt.if_s.else_label) {
 		analyse_statement(context, ast::ast_ptr(if_statement.else_body))!;
 	};
+
+	context.frame.label = &spirv_stmt.if_s.merge_label;
 }
 
 fn void? analyse_return(SemaContext* context, SpirvAst* spirv_stmt) {
@@ -30,7 +80,7 @@ fn void? analyse_return(SemaContext* context, SpirvAst* spirv_stmt) {
 	bool flow_marked = false;
 	while(frame) {
 		if(frame.kind == CONTROL_FLOW && !flow_marked) {
-			frame.flow.statement.flow.returns = true;
+			frame.flow.statement.flow.func_return = true;
 			flow_marked = true;	
 		} else if(frame.kind == FUNCTION) {
 			// Need to resolve the return type here if possible to ensure that the function
@@ -53,6 +103,7 @@ fn void? analyse_statement(SemaContext* context, Ast* statement) @public {
 		context.global.spirv_statements[statement] = spirv_stmt;
 
 		switch(statement.ast_kind) {
+			case AST_BLOCK_EXIT_STMT: analyse_block_exit(context, spirv_stmt)!;
 			case AST_COMPOUND_STMT: analyse_statement(context, ast::ast_ptr(statement.compound_stmt.first_stmt))!;
 			case AST_DECLARE_STMT: analyse_declaration(context, statement.declare_stmt)!;
 			case AST_EXPR_STMT: analyse_expression(context, statement.expr_stmt)!;

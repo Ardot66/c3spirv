@@ -20,6 +20,14 @@ fn void subfunc(ComputeRoot* root) {
 	// ...
 }
 
+macro float* test_macro(ComputeRoot* root, uint index) {
+	if(index < 8) {
+		return root.input;
+	}
+
+	return root.output;
+}
+
 fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// Restrictions: get_root can only be used in an entry point function.
 	// It should ideally be possible to use from within a macro, as long at it's properly
@@ -63,12 +71,13 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 
 	// This should just create an OpVariable and load from the invocation_id, pretty simple.
 	uint id = invocation_id.x;
+	float* test = test_macro(root, id);
 
 	if (id >= root.count) {
 		return;
 	}
 
-	root.output[id] += root.input[id] * 2f + 1;
+	root.output[id] += test[id] * 2f + 1;
 
 	// Branches are a little complex, but I think it should be possible to represent them well.
 	// Will need to do some more experimentation here.

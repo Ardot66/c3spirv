@@ -7,6 +7,7 @@ typedef Id = inline uint;
 
 struct SpirvEntryPoint {
 	Decl* declaration;
+	Id label;
 	ExecutionModel model;
 	union {
 		struct compute {
@@ -48,13 +49,32 @@ struct SpirvType {
 }
 
 struct SpirvFlowCommon {
-	bool returns;
+	bitstruct : uint {
+		bool func_return;
+		bool macro_return;
+	}
+	SpirvExpr* macro_block;
 }
 
 struct SpirvAst {
 	Ast* statement;
 	union {
 		SpirvFlowCommon flow;
+		// Used for linked lists.
+		SpirvAst* next;
+
+		struct block_return {
+			SpirvAst* next;
+			SpirvExpr* block;
+			Id value;
+			Id* label;
+		}
+		struct if_s {
+			SpirvFlowCommon flow;
+			Id then_label;
+			Id else_label;
+			Id merge_label;
+		}
 	}
 }
 
@@ -84,12 +104,19 @@ struct SpirvExpr {
 	ExprType type;
 	Id id;
 	union {
+		struct access {
+			uint index;
+		}
 		struct call {
 			bool is_builtin;
 			ShaderBuiltin builtin;
 		}
-		struct access {
-			uint index;
+		struct macro_block {
+			LinkedList{SpirvAst} returns;
+			Id return_label;
+		}
+		struct macro_return {
+			SpirvExpr* next;
 		}
 		struct subscript {
 			SpirvExpr* index;
@@ -129,10 +156,12 @@ enum SemaStackFrameKind {
 struct SemaStackFrame {
 	SemaStackFrame* parent;
 	SemaStackFrameKind kind;
+	Id* label;
 
 	union {
 		struct macro_frame {
 			SpirvType* return_type;
+			SpirvExpr* block;
 		}
 		struct function {
 			SpirvType* return_type;

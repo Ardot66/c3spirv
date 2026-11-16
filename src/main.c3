@@ -33,7 +33,7 @@ fn int main(String[] args) @public
 
 	codegen::emit(&context);
 
-	// context.print();
+	// context.gen_context.print();
 
 	io::File out_file = file::open("output.spv", "w")!!;
 	defer out_file.close();

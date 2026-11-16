@@ -6,7 +6,7 @@ fn void emit_entry_point(GenContext* context, SpirvEntryPoint* entry) {
 	Id func_type = context.type_op(TYPE_FUNCTION, void_type);
 
 	Id func = context.func_op(FUNCTION, void_type, (uint)(FunctionControl){}, func_type);
-	Id label = context.func_op(LABEL);
+	entry.label = context.func_op(LABEL);
 	Op* label_op = context.func_ops.last_op;
 
 	OpStream body;

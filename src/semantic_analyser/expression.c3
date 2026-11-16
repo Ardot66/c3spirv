@@ -94,6 +94,32 @@ fn ExprType? analyse_identifier(SemaContext* context, SpirvExpr* spirv_expr) {
 	return declaration.variable.type;
 }
 
+fn ExprType? analyse_macro_block(SemaContext* context, SpirvExpr* spirv_expr) {
+	ExprMacroBlock* block = &spirv_expr.expression.macro_block;
+
+	SpirvType* type = analyse_type(context, spirv_expr.expression.type, spirv_expr.expression.loc, UNRESOLVED)!;
+	SemaStackFrame frame = {
+		.macro_frame = {
+			.block = spirv_expr,
+			.return_type = type,
+		}
+	};
+
+	context.@push_frame(&frame, MACRO, context.frame.label) {
+		foreach(Decl* param : ast::vec(block.params)) {
+			analyse_declaration(context, param)!;
+		}
+		analyse_statement(context, ast::ast_ptr(block.first_stmt))!;
+	};
+
+	sz return_count = spirv_expr.macro_block.returns.len();
+	if(return_count > 1 && !type.can_make_variable()) {
+		return err::error(spirv_expr.expression.loc, "Cannot return a logical pointer from more than one place in a macro.")~;
+	}
+
+	return expr_type(type);
+}
+
 fn ExprType? analyse_subscript(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprSubscript* subscript = &spirv_expr.expression.subscript_expr;
 
@@ -183,6 +209,7 @@ fn SpirvExpr*? analyse_expression(SemaContext* context, Expr* expression) @publi
 		case EXPR_CONST: type = expr_type(analyse_type(context, expression.type, expression.loc, LOGICAL))!;
 		case EXPR_EXT_TRUNC: type = analyse_ext_trunc(context, spirv_expr)!;
 		case EXPR_IDENTIFIER: type = analyse_identifier(context, spirv_expr)!;
+		case EXPR_MACRO_BLOCK: type = analyse_macro_block(context, spirv_expr)!;
 		case EXPR_SUBSCRIPT: type = analyse_subscript(context, spirv_expr)!;
 		case EXPR_UNARY: type = analyse_unary(context, spirv_expr)!;
 		default: return err::error(expression.loc, "Unsupported expression kind: %s", ast::const_name(expression.expr_kind))~;

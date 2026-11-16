@@ -1,6 +1,8 @@
 module ardot::c3spirv::codegen @local;
 import ardot::c3spirv, ardot::c3c::ast;
 
+import std::io;
+
 fn Id emit_access(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprResolvedAccess* resolved = &spirv_expr.expression.access_resolved_expr;
 	SpirvExpr* parent = emit_expression(context, resolved.parent);
@@ -195,6 +197,48 @@ fn Id emit_identifier(GenContext* context, SpirvExpr* spirv_expr) {
 	return spirv_decl.variable.id;
 }
 
+fn Id emit_macro_block(GenContext* context, SpirvExpr* spirv_expr) {
+	ExprMacroBlock* block = &spirv_expr.expression.macro_block;
+
+	OpStream return_stream;
+	@push_stream(context, &return_stream) {
+		spirv_expr.macro_block.return_label = context.func_op(LABEL);
+	};
+
+	foreach(Decl* param : ast::vec(block.params)) {
+		emit_declaration(context, param);
+	}
+
+	emit_statement(context, ast::ast_ptr(block.first_stmt));
+
+	// This marks the return block where all control flow will reconverge.
+	context.func_op(BRANCH, spirv_expr.macro_block.return_label);
+	append_stream(context, &return_stream);
+
+	SpirvType* rtype = spirv_expr.type.ref;
+	if(rtype.kind == TYPE_VOID)	{
+		// No need to return anything in this case.
+		return {};
+	} else {
+		sz return_count = spirv_expr.macro_block.returns.len();
+		if(return_count == 1) {
+			return spirv_expr.macro_block.returns.first.block_return.value;
+		}
+
+		@pool() {
+			uint[] params = mem::talloc_array(uint, return_count * 2);
+			sz i = 0;
+			spirv_expr.macro_block.returns.@enumerate(; SpirvAst* return_stmt) {
+				params[i] = return_stmt.block_return.value;
+				params[i + 1] = *return_stmt.block_return.label;
+				i += 2;
+			};
+
+			return context.func_op_raw(PHI, {type_id(context, rtype)}, params);
+		};
+	}
+}
+
 fn Id emit_subscript(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprSubscript* subscript = &spirv_expr.expression.subscript_expr;
 
@@ -233,12 +277,13 @@ fn SpirvExpr* emit_spirv_expression(GenContext* context, SpirvExpr* spirv_expr) 
 		case EXPR_CONST: id = emit_const(context, spirv_expr);
 		case EXPR_EXT_TRUNC: id = emit_trunc(context, spirv_expr);
 		case EXPR_IDENTIFIER: id = emit_identifier(context, spirv_expr);
+		case EXPR_MACRO_BLOCK: id = emit_macro_block(context, spirv_expr);
 		case EXPR_SUBSCRIPT: id = emit_subscript(context, spirv_expr);
 		case EXPR_UNARY: id = emit_unary(context, spirv_expr);
 		default: unreachable("Unsupported codegen expression: %s", ast::const_name(spirv_expr.expression.expr_kind));
 	}
 
-	assert(id);
+	// assert(id);
 	spirv_expr.id = id;
 	return spirv_expr;
 }

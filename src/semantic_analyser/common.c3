@@ -19,6 +19,15 @@ fn SpirvType* inner_type(SpirvType* type) {
 	}
 }
 
+fn bool SpirvType.can_make_variable(&self) {
+	switch(self.kind) {
+		case TYPE_POINTER: 
+			assert(self.resolved);
+			return self.pointer.class == PHYSICAL_STORAGE_BUFFER;
+		default: return true;
+	}
+}
+
 fn bool types_equal(SpirvType* a, SpirvType* b) {
 	// SpirvType.original is set to be a circular reference for original types,
 	// so this check works.
@@ -130,7 +139,10 @@ fn void SemaContext.add_type(&self, SpirvType* type) {
 	self.last_type = type;
 }
 
-macro void SemaContext.@push_frame(&self, SemaStackFrame* frame; @body()) {
+macro void SemaContext.@push_frame(&self, SemaStackFrame* frame, SemaStackFrameKind kind, Id* label; @body()) {
+	frame.kind = kind;
+	frame.label = label;
+
 	frame.parent = self.frame;
 	self.frame = frame;
 
