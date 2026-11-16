@@ -261,8 +261,24 @@ fn Id emit_subscript(GenContext* context, SpirvExpr* spirv_expr) {
 fn Id emit_unary(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprUnary* unary = &spirv_expr.expression.unary_expr;
 	SpirvExpr* inner = emit_expression(context, unary.expr);
+	TypeKind kind = inner.type.ref.kind;
 	switch(unary.operator) {
 		case UNARYOP_DEREF: return expr_value(context, inner);
+		case UNARYOP_ADDR: return inner.id;
+		case UNARYOP_NEG: return context.func_op(num_op(kind, F_NEGATE, S_NEGATE), expr_value(context, inner));
+		case UNARYOP_PLUS: return expr_value(context, inner);
+		case UNARYOP_BITNEG: return context.func_op(BITWISE_NOT, expr_value(context, inner));
+		case UNARYOP_NOT: return context.func_op(LOGICAL_NOT, expr_value(context, inner));
+		// Will support these later, for now they're a bit complex.
+		// case UNARYOP_INC:
+		// case UNARYOP_DEC:
+		case UNARYOP_TADDR:
+			return context.func_var_op(
+				VARIABLE, 
+				type_id(context, inner.type.real), 
+				StorageClass.FUNCTION, 
+				expr_value(context, inner
+			));
 		default: unreachable("Unsupported unary kind: %s", ast::const_name(unary.operator));
 	}
 }

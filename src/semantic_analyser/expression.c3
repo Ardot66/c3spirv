@@ -152,6 +152,18 @@ fn ExprType? analyse_unary(SemaContext* context, SpirvExpr* spirv_expr) {
 	SpirvExpr* inner = analyse_expression(context, unary.expr)!;
 	switch(unary.operator) {
 		case UNARYOP_DEREF: return expr_deref(inner.type);
+		case UNARYOP_ADDR: return expr_addr(inner.type);
+		case UNARYOP_NEG: 
+		case UNARYOP_PLUS:
+		case UNARYOP_BITNEG:
+		case UNARYOP_NOT:
+			return expr_deref(inner.type);
+		// Unsupported for now because setting up the constants would be pretty complex.
+		case UNARYOP_INC:
+		case UNARYOP_DEC:
+			nextcase default;
+		case UNARYOP_TADDR:
+			return expr_type(create_type_pointer(context, null, FUNCTION, inner.type.ref));
 		default: return err::error(spirv_expr.expression.loc, "Unsupported unary kind: %s", ast::const_name(unary.operator))~;
 	}
 }
