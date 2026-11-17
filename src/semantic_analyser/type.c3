@@ -145,16 +145,18 @@ enum PointerMode {
 }
 
 fn SpirvType*? analyse_type(SemaContext* context, Type* type, SourceLocId loc, PointerMode pointer_mode, bool* parent_resolved = null) {
+	TypeKind kind = type.type_kind;
+
 	bool is_primitive = false;
-	is_primitive |= type.type_kind >= TYPE_NUM_FIRST && type.type_kind <= TYPE_NUM_LAST;
-	is_primitive |= type.type_kind == TYPE_VOID || type.type_kind == TYPE_BOOL;
+	is_primitive |= kind >= TYPE_NUM_FIRST && kind <= TYPE_NUM_LAST;
+	is_primitive |= kind == TYPE_VOID || kind == TYPE_BOOL;
 
 	bool resolved = true;
 	SpirvType* spirv_type;
 	if(is_primitive) {
 		spirv_type = create_type_primitive(context, type);
 	} else {
-		switch(type.type_kind) {
+		switch(kind) {
 			case TYPE_ALIAS: 
 				spirv_type = analyse_type(context, type.canonical, loc, pointer_mode, &resolved)!;
 			case TYPE_POINTER:
@@ -191,7 +193,7 @@ fn SpirvType*? analyse_type(SemaContext* context, Type* type, SourceLocId loc, P
 					analyse_type(context, type.array.base, loc, pointer_mode, &resolved),
 					(uint)type.array.len
 				)!;
-			default: return err::error(loc, "Unsupported type kind: %s", ast::const_name(type.type_kind))~;
+			default: return err::error(loc, "Unsupported type kind: %s", ast::const_name(kind))~;
 		}
 	}
 

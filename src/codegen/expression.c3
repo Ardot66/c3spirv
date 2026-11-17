@@ -1,5 +1,6 @@
 module ardot::c3spirv::codegen @local;
 import ardot::c3spirv, ardot::c3c::ast;
+import std::core::bitorder;
 
 import std::io;
 
@@ -169,11 +170,43 @@ fn Id emit_cond(GenContext* context, SpirvExpr* spirv_expr) {
 fn Id emit_const(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprConst* const_expr = &spirv_expr.expression.const_expr;
 	Id type = type_id(context, spirv_expr.type.ref);
+	TypeKind kind = spirv_expr.type.ref.kind;
 	switch(const_expr.const_kind) {
 		case CONST_FLOAT:
-			return context.type_op(CONSTANT, type, bitcast((float)const_expr.fxx.f, uint));
+			uint[2] operand_buffer;
+			uint[] operands = operand_buffer[0..0];
+			double value = const_expr.fxx.f;
+			switch(kind) {
+				case TYPE_F16: operand_buffer[0] = bitcast((float16)value, ushort);
+				case TYPE_F32: operand_buffer[0] = bitcast((float)value, uint);
+				case TYPE_F64:
+					operand_buffer[0..1] = bitcast(value, uint[<2>])[..];
+					$if env::BIG_ENDIAN:
+						operand_buffer[0] = operand_buffer[1];
+					$endif
+					operands = operand_buffer[0..1];
+			}
+			return context.type_op_raw(CONSTANT, {type}, operands);
 		case CONST_INTEGER:
-			return context.type_op(CONSTANT, type, (uint)const_expr.ixx.i.low);
+			uint[2] operand_buffer;
+			uint[] operands = operand_buffer[0..0];
+			Int128 value = const_expr.ixx.i;
+			switch(kind) {
+				case TYPE_I8:
+				case TYPE_I16:
+				case TYPE_I32:
+				case TYPE_U8:
+				case TYPE_U16:
+				case TYPE_U32:
+					operand_buffer[0] = (uint)value.low;
+				case TYPE_U64:
+					operand_buffer[0..1] = bitcast(value.low, uint[<2>])[..];
+					$if env::BIG_ENDIAN:
+						operand_buffer[0] = operand_buffer[1];
+					$endif
+					operands = operand_buffer[0..1];
+			}
+			return context.type_op_raw(CONSTANT, {type}, operands);
 		case CONST_BOOL:
 			Opcode op = const_expr.b ? CONSTANT_TRUE : CONSTANT_FALSE;
 			return context.type_op(op);
@@ -245,7 +278,7 @@ fn Id emit_subscript(GenContext* context, SpirvExpr* spirv_expr) {
 	SpirvExpr* left = emit_expression(context, ast::expr_ptr(subscript.expr));
 	SpirvExpr* index = emit_spirv_expression(context, spirv_expr.subscript.index);
 
-	switch(left.type.ref.type.type_kind) {
+	switch(left.type.ref.kind) {
 		case TYPE_VECTOR:
 			if(left.type.ref != left.type.real) {
 				return context.func_op(ACCESS_CHAIN, type_id(context, spirv_expr.type.real), left.id, expr_value(context, index));
@@ -254,7 +287,7 @@ fn Id emit_subscript(GenContext* context, SpirvExpr* spirv_expr) {
 			}
 		case TYPE_POINTER: 
 			return context.func_op(PTR_ACCESS_CHAIN, type_id(context, spirv_expr.type.real), expr_value(context, left), expr_value(context, index));
-		default: unreachable("Unsupported subscript kind: %s", ast::const_name(left.type.ref.type.type_kind));
+		default: unreachable("Unsupported subscript kind: %s", ast::const_name(left.type.ref.kind));
 	}
 }
 

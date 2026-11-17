@@ -151,6 +151,7 @@ enum SemaStackFrameKind {
 	MACRO,
 	CONTROL_FLOW,
 	FUNCTION,
+	INFO,
 }
 
 struct SemaStackFrame {
@@ -168,6 +169,9 @@ struct SemaStackFrame {
 		}
 		struct flow {
 			SpirvAst* statement;
+		}
+		bitstruct info : ulong {
+			bool truncate_64_bit_constants;
 		}
 	}
 }

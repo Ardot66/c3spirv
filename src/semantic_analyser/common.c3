@@ -12,7 +12,7 @@ fn SpirvType* inner_type(SpirvType* type) {
 		return type.pointer.inner;
 	}
 
-	switch(type.type.type_kind) {
+	switch(type.kind) {
 		case TYPE_POINTER: return type.pointer.inner;
 		case TYPE_VECTOR: return type.vector.member;
 		default: return type;

@@ -24,20 +24,18 @@ fn Id type_id(GenContext* context, SpirvType* type) {
 	}
 
 	Id id;
-	switch(type.type.type_kind) {
+	switch(type.kind) {
 		case TYPE_VOID: id = context.type_op(TYPE_VOID);
 		case TYPE_BOOL: id = context.type_op(TYPE_BOOL);
 		case TYPE_I8: id = context.type_op(TYPE_INT, 8, 1);
 		case TYPE_I16: id = context.type_op(TYPE_INT, 16, 1);
 		case TYPE_I32: id = context.type_op(TYPE_INT, 32, 1);
-		case TYPE_I64: id = context.type_op(TYPE_INT, 32, 1);
-		// case TYPE_I64: id = context.type_op(TYPE_INT, 64, 1); // Limiting 64 bit constants for now.
+		case TYPE_I64: id = context.type_op(TYPE_INT, 64, 1);
 		// case TYPE_I128: // unsupported for now.
 		case TYPE_U8: id = context.type_op(TYPE_INT, 8, 0);
 		case TYPE_U16: id = context.type_op(TYPE_INT, 16, 0);
 		case TYPE_U32: id = context.type_op(TYPE_INT, 32, 0);
-		case TYPE_U64: id = context.type_op(TYPE_INT, 32, 0);
-		// case TYPE_U64: id = context.type_op(TYPE_INT, 64, 0); // Limiting 64 bit constants for now.
+		case TYPE_U64: id = context.type_op(TYPE_INT, 64, 0);
 		// case TYPE_U128: // unsupported for now.
 		case TYPE_F16: id = context.type_op(TYPE_FLOAT, 16);
 		// case TYPE_BF16: // unsupported for now.
@@ -68,7 +66,7 @@ fn Id type_id(GenContext* context, SpirvType* type) {
 			Id inner = type_id(context, type.vector.member);
 			id = context.type_op(TYPE_VECTOR, inner, (uint)type.vector.length);
 		default:
-			unreachable("Unsupported codegen type: %s", ast::const_name(type.type.type_kind));
+			unreachable("Unsupported codegen type: %s", ast::const_name(type.kind));
 	}
 
 	assert(id);

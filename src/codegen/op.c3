@@ -77,13 +77,15 @@ fn Id GenContext.generate_id(&self) {
 }
 
 fn void GenContext.print(&self) {
-	self.init_ops.print();
-	self.decoration_ops.print();
-	self.type_ops.print();
-	self.func_ops.print();
+	// 5 extra because of the header.
+	sz words = 5;
+	self.init_ops.print(&words);
+	self.decoration_ops.print(&words);
+	self.type_ops.print(&words);
+	self.func_ops.print(&words);
 }
 
-fn void OpStream.print(&self) => @pool() {
+fn void OpStream.print(&self, sz* words) => @pool() {
 	DString buffer;
 	buffer.tinit(256);
 	Op* op = self.first_op;
@@ -93,13 +95,21 @@ fn void OpStream.print(&self) => @pool() {
 
 		uint result_index = op.result_index();
 		uint result_id = result_index == 0 ? 0 : op.operands[result_index];
+		buffer.appendf(" %s ", ast::const_name(opcode));
+
+		sz line_start = io::printf("%5s: ", *words)!!;
 		if(result_index) {
-			buffer.appendf("%%%s = ", result_id);
+			line_start += io::printf("%%%s = ", result_id)!!;
 		}
-		buffer.appendf("%s ", ast::const_name(opcode));
-		sz whitespace = 30 - buffer.len();
+
+		sz whitespace = 30 - buffer.len() - line_start;
+
 		for(sz i = 0; i < whitespace; i++) {
-			io::print(" ");
+			if(result_index) {
+				io::print("-");
+			} else {
+				io::print(" ");
+			}
 		}
 		io::print(buffer);
 		for(sz i = 1; i < opsize; i++) {
@@ -111,6 +121,7 @@ fn void OpStream.print(&self) => @pool() {
 		op = op.next;
 
 		buffer.clear();
+		*words += opsize;
 	}
 }
 
@@ -173,6 +184,7 @@ fn void OpStream.add_op(&self, Op* op) {
 	if(self.first_op == null) {
 		self.first_op = op;
 		self.last_op = op;
+		return;
 	}
 
 	self.last_op.next = op;

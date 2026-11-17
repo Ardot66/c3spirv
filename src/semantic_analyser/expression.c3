@@ -84,6 +84,44 @@ fn ExprType? analyse_cond(SemaContext* context, SpirvExpr* spirv_expr) {
 	return analyse_expression(context, expressions[^1]).type!;
 }
 
+fn ExprType? analyse_const(SemaContext* context, SpirvExpr* spirv_expr) {
+	ExprConst* const_e = &spirv_expr.expression.const_expr;
+	Type* type = spirv_expr.expression.type.canonical;
+
+	bool truncate;
+	if(context.frame.kind == INFO) {
+		truncate = context.frame.info.truncate_64_bit_constants;
+	}
+
+	TypeKind kind = type.type_kind;
+	switch(kind) {
+		// This is a bit cursed, but handles cases where c3c really wants to
+		// use 64 bit integer constants, like in subscripts.
+		case TYPE_I64:
+			if(truncate) {
+				type = c3spirv::int_type;
+			} else {
+				return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+			}
+		case TYPE_U64:
+			if(truncate) {
+				type = c3spirv::uint_type;
+			} else {
+				return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+			}
+		case TYPE_F64:
+			return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+		case TYPE_I128:
+		case TYPE_U128:
+		case TYPE_F128:
+			return err::error(spirv_expr.expression.loc, "128 bit types are not allowed in shaders.")~;
+		default: break;
+	}
+
+	// Override the type kind here in case we need to truncate it.
+	return expr_type(analyse_type(context, type, spirv_expr.expression.loc, LOGICAL))!;
+}
+
 fn ExprType? analyse_ext_trunc(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprExtTrunc* trunc = &spirv_expr.expression.ext_trunc_expr;
 	return expr_type(analyse_type(context, spirv_expr.expression.type, spirv_expr.expression.loc, LOGICAL))!;
@@ -132,17 +170,24 @@ fn ExprType? analyse_subscript(SemaContext* context, SpirvExpr* spirv_expr) {
 		index_expr = index_expr.ext_trunc_expr.inner;
 	}
 
-	spirv_expr.subscript.index = analyse_expression(context, index_expr)!;
+	SemaStackFrame frame = {
+		.info = {
+			.truncate_64_bit_constants = true,
+		}
+	};
+	context.@push_frame(&frame, INFO, context.frame.label) {
+		spirv_expr.subscript.index = analyse_expression(context, index_expr)!;
+	};
 
 	ExprType type;
-	switch(left.type.ref.type.type_kind) {
+	switch(left.type.ref.kind) {
 		case TYPE_VECTOR:
 			type = expr_type(left.type.ref.vector.member);
 			if(left.type.ref != left.type.real) {
 				type.real = create_type_pointer(context, null, left.type.real.pointer.class, type.ref);
 			}
 		case TYPE_POINTER: type = expr_deref(expr_type(left.type.ref));
-		default: return err::error(spirv_expr.expression.loc, "Unsupported subscript type kind: %s", ast::const_name(left.type.ref.type.type_kind))~;
+		default: return err::error(spirv_expr.expression.loc, "Unsupported subscript type kind: %s", ast::const_name(left.type.ref.kind))~;
 	}
 	return type;
 }
@@ -218,7 +263,7 @@ fn SpirvExpr*? analyse_expression(SemaContext* context, Expr* expression) @publi
 		case EXPR_BINARY: type = analyse_binary(context, spirv_expr)!;
 		case EXPR_CALL: type = analyse_call(context, spirv_expr)!;
 		case EXPR_COND: type = analyse_cond(context, spirv_expr)!;
-		case EXPR_CONST: type = expr_type(analyse_type(context, expression.type, expression.loc, LOGICAL))!;
+		case EXPR_CONST: type = analyse_const(context, spirv_expr)!;
 		case EXPR_EXT_TRUNC: type = analyse_ext_trunc(context, spirv_expr)!;
 		case EXPR_IDENTIFIER: type = analyse_identifier(context, spirv_expr)!;
 		case EXPR_MACRO_BLOCK: type = analyse_macro_block(context, spirv_expr)!;

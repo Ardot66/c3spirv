@@ -3,6 +3,8 @@ import ardot::c3c::ast;
 import std::io, std::collections::map;
 
 Type* bool_type;
+Type* int_type;
+Type* uint_type;
 
 fn void find_builtin_types() {
 	Type*[] types = ast::vec(ast::gc().type);
@@ -10,6 +12,8 @@ fn void find_builtin_types() {
 	foreach(Type* type : types) {
 		switch(type.type_kind) {
 			case TYPE_BOOL: bool_type = type;
+			case TYPE_I32: int_type = type;
+			case TYPE_U32: uint_type = type;
 		}
 	}
 }
