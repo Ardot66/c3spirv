@@ -84,6 +84,20 @@ fn ExprType? analyse_cond(SemaContext* context, SpirvExpr* spirv_expr) {
 	return analyse_expression(context, expressions[^1]).type!;
 }
 
+fn void? analyse_const_initializer(SemaContext* context, ConstInitializer* init, SourceLocId loc) {
+	switch(init.kind) {
+		case CONST_INIT_VALUE:
+			// Don't need to bother with types here, because constant stuff is guaranteed
+			// to be nicely logical.
+			analyse_expression(context, init.init_value)!;
+		case CONST_INIT_ARRAY_FULL: 
+			foreach(ConstInitializer* member : ast::vec(init.init_array_full)) {
+				analyse_const_initializer(context, member, loc)!;
+			}
+		default: return err::error(loc, "Unsupported const initializer kind: %s", ast::const_name(init.kind))~;
+	}
+}
+
 fn ExprType? analyse_const(SemaContext* context, SpirvExpr* spirv_expr) {
 	ExprConst* const_e = &spirv_expr.expression.const_expr;
 	Type* type = spirv_expr.expression.type.canonical;
@@ -94,29 +108,36 @@ fn ExprType? analyse_const(SemaContext* context, SpirvExpr* spirv_expr) {
 	}
 
 	TypeKind kind = type.type_kind;
-	switch(kind) {
-		// This is a bit cursed, but handles cases where c3c really wants to
-		// use 64 bit integer constants, like in subscripts.
-		case TYPE_I64:
-			if(truncate) {
-				type = c3spirv::int_type;
-			} else {
-				return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+	switch(const_e.const_kind) {
+		case CONST_FLOAT:
+		case CONST_INTEGER:
+			switch(kind) {
+				// This is a bit cursed, but handles cases where c3c really wants to
+				// use 64 bit integer constants, like in subscripts.
+				case TYPE_I64:
+					if(truncate) {
+						type = c3spirv::int_type;
+					} else {
+						return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+					}
+				case TYPE_U64:
+					if(truncate) {
+						type = c3spirv::uint_type;
+					} else {
+						return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+					}
+				case TYPE_F64:
+					return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
+				case TYPE_I128:
+				case TYPE_U128:
+				case TYPE_F128:
+					return err::error(spirv_expr.expression.loc, "128 bit types are not allowed in shaders.")~;
+				default: break;
 			}
-		case TYPE_U64:
-			if(truncate) {
-				type = c3spirv::uint_type;
-			} else {
-				return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
-			}
-		case TYPE_F64:
-			return err::error(spirv_expr.expression.loc, "64 bit types are not allowed in shaders.")~;
-		case TYPE_I128:
-		case TYPE_U128:
-		case TYPE_F128:
-			return err::error(spirv_expr.expression.loc, "128 bit types are not allowed in shaders.")~;
-		default: break;
+		case CONST_INITIALIZER: analyse_const_initializer(context, const_e.initializer, spirv_expr.expression.loc)!;
+		default: return err::error(spirv_expr.expression.loc, "Unsupported const kind: %s", ast::const_name(const_e.const_kind))~;
 	}
+
 
 	// Override the type kind here in case we need to truncate it.
 	return expr_type(analyse_type(context, type, spirv_expr.expression.loc, LOGICAL))!;
@@ -255,7 +276,7 @@ fn SpirvExpr*? analyse_expression(SemaContext* context, Expr* expression) @publi
 	SpirvExpr* spirv_expr = alloc::new(&context.global.vmem, SpirvExpr, {
 		.expression = expression,
 	});
-	context.global.spirv_expressions[expression] = spirv_expr;
+	context.global.spirv_data[expression] = spirv_expr;
 
 	ExprType type;
 	switch(expression.expr_kind) {

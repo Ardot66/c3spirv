@@ -141,8 +141,7 @@ struct GlobalContext {
 	Vmem vmem;
 
 	List{SpirvEntryPoint*} entry_points;
-	HashMap{Expr*, SpirvExpr*} spirv_expressions;
-	HashMap{Ast*, SpirvAst*} spirv_statements;
+	HashMap{void*, void*} spirv_data;
 
 	GenContext* gen_context;
 }

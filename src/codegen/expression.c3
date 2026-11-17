@@ -167,6 +167,27 @@ fn Id emit_cond(GenContext* context, SpirvExpr* spirv_expr) {
 	return emit_expression(context, expressions[^1]).id;
 }
 
+fn Id emit_const_initializer(GenContext* context, ConstInitializer* initializer, SpirvType* type) {
+	switch(initializer.kind) {
+		case CONST_INIT_VALUE:
+			return emit_expression(context, initializer.init_value).id;
+		case CONST_INIT_ARRAY_FULL:	@pool() {
+			ConstInitializer*[] elements = ast::vec(initializer.init_array_full);
+			Id[] operands = mem::talloc_array(Id, elements.len);
+			SpirvType* inner;
+			switch(type.kind) {
+				case TYPE_VECTOR: inner = type.vector.member;
+				default: unreachable();
+			}
+			foreach(sz i, ConstInitializer* element : elements) {
+				operands[i] = emit_const_initializer(context, element, inner);
+			}
+			return context.type_op_raw(CONSTANT_COMPOSITE, {type_id(context, type)}, (uint[])operands);
+		};
+		default: unreachable("Unsupported codegen const initializer %s", ast::const_name(initializer.kind));
+	}
+}
+
 fn Id emit_const(GenContext* context, SpirvExpr* spirv_expr) {
 	ExprConst* const_expr = &spirv_expr.expression.const_expr;
 	Id type = type_id(context, spirv_expr.type.ref);
@@ -210,6 +231,8 @@ fn Id emit_const(GenContext* context, SpirvExpr* spirv_expr) {
 		case CONST_BOOL:
 			Opcode op = const_expr.b ? CONSTANT_TRUE : CONSTANT_FALSE;
 			return context.type_op(op);
+		case CONST_INITIALIZER: 
+			return emit_const_initializer(context, const_expr.initializer, spirv_expr.type.ref);
 		default: unreachable("Unsupported codegen const %s", ast::const_name(const_expr.const_kind));
 	}
 }
@@ -338,5 +361,5 @@ fn SpirvExpr* emit_spirv_expression(GenContext* context, SpirvExpr* spirv_expr) 
 }
 
 fn SpirvExpr* emit_expression(GenContext* context, Expr* expression) @public {
-	return emit_spirv_expression(context, context.global.spirv_expressions.get(expression))!!;
+	return emit_spirv_expression(context, context.global.spirv_data.get(expression))!!;
 }

@@ -11,6 +11,10 @@ fn Id pointer_type_id(GenContext* context, SpirvType* type) {
 	return pointer_id;
 }
 
+// fn Id primitive_type_id() {
+
+// }
+
 fn Id type_id(GenContext* context, SpirvType* type) {
 	assert(type.resolved);
 

@@ -20,6 +20,7 @@ constdef Opcode : ushort {
 	CONSTANT_TRUE = 41,
 	CONSTANT_FALSE = 42,
 	CONSTANT = 43,
+	CONSTANT_COMPOSITE = 44,
 	FUNCTION = 54,
 	FUNCTION_PARAMETER = 55,
 	FUNCTION_END = 56,
@@ -133,6 +134,7 @@ fn uint Opcode.result_index(self) {
 		case CONSTANT_TRUE:
 		case CONSTANT_FALSE:
 		case CONSTANT:
+		case CONSTANT_COMPOSITE:
 		case FUNCTION:
 		case FUNCTION_PARAMETER:
 		case VARIABLE:

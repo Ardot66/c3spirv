@@ -57,7 +57,7 @@ fn void emit_block_exit(GenContext* context, SpirvAst* spirv_stmt) {
 
 fn void emit_statement(GenContext* context, Ast* statement) @public {
 	while(statement) {
-		SpirvAst* spirv_stmt = context.global.spirv_statements[statement]!!;
+		SpirvAst* spirv_stmt = context.global.spirv_data[statement]!!;
 
 		switch(statement.ast_kind) {
 			case AST_BLOCK_EXIT_STMT: emit_block_exit(context, spirv_stmt);

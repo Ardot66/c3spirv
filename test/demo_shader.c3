@@ -53,6 +53,9 @@ fn void compute_alt() @ComputeShader({64, 1, 1}) {
 	// They should work in macros to allow helper creation.
 	uint[<3>] invocation_id = c3spirv::get_global_invocation_id();
 
+	uint[<3>]* test2 = &invocation_id;
+	// *test2 = {2, 2, 3};
+
 	// uint[<3>] test_values;
 	// bool[<3>] result = test_values.comp_le(invocation_id);
 

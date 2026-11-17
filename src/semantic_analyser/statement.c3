@@ -100,7 +100,7 @@ fn void? analyse_statement(SemaContext* context, Ast* statement) @public {
 		SpirvAst* spirv_stmt = alloc::new(&context.global.vmem, SpirvAst, {
 			.statement = statement
 		});
-		context.global.spirv_statements[statement] = spirv_stmt;
+		context.global.spirv_data[statement] = spirv_stmt;
 
 		switch(statement.ast_kind) {
 			case AST_BLOCK_EXIT_STMT: analyse_block_exit(context, spirv_stmt)!;
