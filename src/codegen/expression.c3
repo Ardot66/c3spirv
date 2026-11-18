@@ -167,11 +167,11 @@ fn Id emit_cond(GenContext* context, SpirvExpr* spirv_expr) {
 	return emit_expression(context, expressions[^1]).id;
 }
 
-fn Id emit_null(GenContext* context, SpirvType* type) {
+fn Id emit_null_simple(GenContext* context, SpirvType* type) {
 	return context.type_op(CONSTANT_NULL, type_id(context, type));
 }
 
-fn Id emit_const_zero_recursive(GenContext* context, SpirvType* type) {
+fn Id emit_null_recursive(GenContext* context, SpirvType* type) {
 	if(type.null_emitted) {
 		return type.null_id;
 	}
@@ -188,7 +188,7 @@ fn Id emit_const_zero_recursive(GenContext* context, SpirvType* type) {
 		case TYPE_STRUCT: @pool() {
 			Id[] member_ids = mem::talloc_array(Id, type.structure.members.len);
 			foreach(sz i, SpirvType* member : type.structure.members) {
-				Id member_id = emit_const_zero_recursive(context, member);
+				Id member_id = emit_null_recursive(context, member);
 				simple &= !member_id;
 				member_ids[i] = member_id;
 			}
@@ -199,7 +199,7 @@ fn Id emit_const_zero_recursive(GenContext* context, SpirvType* type) {
 
 			for(sz i = 0; i < member_ids.len; i++) {
 				if(!member_ids[i]) {
-					member_ids[i] = emit_null(context, type.structure.members[i]);
+					member_ids[i] = emit_null_simple(context, type.structure.members[i]);
 				}
 			}
 			id = context.type_op_raw(CONSTANT_COMPOSITE, {type_id(context, type)}, (uint[])member_ids);
@@ -212,21 +212,21 @@ fn Id emit_const_zero_recursive(GenContext* context, SpirvType* type) {
 	return id;
 }
 
-fn Id emit_const_zero(GenContext* context, SpirvType* type) {
+fn Id emit_null(GenContext* context, SpirvType* type) @public {
 	if(type.null_emitted) {
 		return type.null_id;
 	}
 
-	Id complex = emit_const_zero_recursive(context, type);
+	Id complex = emit_null_recursive(context, type);
 	if(!complex) {
-		return emit_null(context, type);
+		return emit_null_simple(context, type);
 	}
 	return complex;
 }
 
 fn Id emit_const_initializer(GenContext* context, ConstInitializer* initializer, SpirvType* type) {
 	switch(initializer.kind) {
-		case CONST_INIT_ZERO: return emit_const_zero(context, type);
+		case CONST_INIT_ZERO: return emit_null(context, type);
 		case CONST_INIT_VALUE:
 			return emit_expression(context, initializer.init_value).id;
 		case CONST_INIT_ARRAY_FULL:	@pool() {

@@ -16,7 +16,14 @@ fn void emit_var(GenContext* context, SpirvDecl* spirv_decl) {
 		spirv_decl.variable.id = initializer;
 	} else {
 		Id pointer = type_id(context, type.real);
-		Id variable = context.func_var_op(VARIABLE, pointer, StorageClass.FUNCTION);
+
+		Id variable;
+		if(!initializer) {
+			variable = context.func_var_op(VARIABLE, pointer, StorageClass.FUNCTION, emit_null(context, type.ref));
+		} else {
+			variable = context.func_var_op(VARIABLE, pointer, StorageClass.FUNCTION);
+		}
+
 		if(initializer) {
 			context.func_op(STORE, variable, initializer);
 		}
