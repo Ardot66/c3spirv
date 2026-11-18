@@ -81,6 +81,10 @@ fn void error_msg(SourceLocId loc_id, String error_kind, String format, args...)
 
 	for(sz i = 0; i < loc.length; i++) {
 		io::eprintf("^");
+		if(i + loc.col >= error_line.content.len) {
+			io::eprintf(" (+ additional lines)");
+			break;
+		}
 	}
 
 	io::eprintf("\n%s:%s:%s: %s: ", (ZString)file.full_path, loc.row, loc.col, error_kind);
