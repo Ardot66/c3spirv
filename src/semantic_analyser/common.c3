@@ -39,6 +39,8 @@ fn bool ExprType.is_ref(self) => !types_equal(self.real, self.ref);
 fn void? analyse_assignment(SemaContext* context, ExprType variable, ExprType value, SourceLocId loc) {
 	if(!variable.is_ref()) {
 		return err::error(loc, "Cannot assign to this value, it is not a reference.")~;
+	} else if(variable.real.kind == TYPE_POINTER && variable.real.pointer.class == UNIFORM) {
+		return err::error(loc, "It is not possible to write to a pointer with the uniform storage class")~;
 	}
 
 	resolve_types(context, variable.ref, value.ref, loc)!;
