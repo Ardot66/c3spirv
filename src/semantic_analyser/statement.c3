@@ -17,7 +17,7 @@ fn void? analyse_block_exit(SemaContext* context, SpirvAst* spirv_stmt) {
 			// Need to resolve the return type here if possible to ensure that the function
 			// doesn't try to return incompatible types in different places.
 			if(expression) {
-				resolve_type(context, frame.macro_frame.return_type, expression.type.ref, expression.expression.loc)!;
+				resolve_types(context, frame.macro_frame.return_type, expression.type.ref, expression.expression.loc)!;
 			}
 			block = frame.macro_frame.block;
 			block.macro_block.returns.push(spirv_stmt);
@@ -86,7 +86,7 @@ fn void? analyse_return(SemaContext* context, SpirvAst* spirv_stmt) {
 			// Need to resolve the return type here if possible to ensure that the function
 			// doesn't try to return incompatible types in different places.
 			if(expression) {
-				resolve_type(context, frame.function.return_type, expression.type.ref, expression.expression.loc)!;
+				resolve_types(context, frame.function.return_type, expression.type.ref, expression.expression.loc)!;
 			}
 			break;
 		}

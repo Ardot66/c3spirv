@@ -32,7 +32,7 @@ fn int main(String[] args) @public
 		arg_context.test_mode = true;
 		ast::load_ast({"c3cdev", "compile-only", "--ast-dump", "--no-obj", args[1], "src/lib.c3"})!!;
 	} else {
-		ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
+		ast::load_ast({"c3cdev", "compile-only", "--ast-dump", "test/demo_shader.c3", "src/lib.c3"})!!;
 	}
 
     defer ast::free_ast();

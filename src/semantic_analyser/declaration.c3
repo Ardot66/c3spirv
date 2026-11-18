@@ -20,7 +20,7 @@ fn void? analyse_var(SemaContext* context, SpirvDecl* spirv_decl) {
 		// Intentionally not using analyse_assignment here because we allow the special
 		// case where we can't create a proper SPIR-V variable, but we can use a SSA ID
 		// from the initializer.
-		resolve_type(context, type.ref, init.type.ref, variable.init_expr.loc)!;
+		resolve_types(context, type.ref, init.type.ref, variable.init_expr.loc)!;
 	} else if(!type.is_ref()) {
 		return err::error(spirv_decl.declaration.loc, "Variables containing pointers must have an initializer.")~;
 	}

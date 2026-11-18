@@ -1,6 +1,7 @@
 module ardot::c3spirv;
 
 constdef Opcode : ushort {
+	UNDEF = 1,
 	EXTENSION = 10,
 	MEMORY_MODEL = 14,
 	ENTRY_POINT = 15,
@@ -21,6 +22,8 @@ constdef Opcode : ushort {
 	CONSTANT_FALSE = 42,
 	CONSTANT = 43,
 	CONSTANT_COMPOSITE = 44,
+	CONSTANT_SAMPLER = 45,
+	CONSTANT_NULL = 46,
 	FUNCTION = 54,
 	FUNCTION_PARAMETER = 55,
 	FUNCTION_END = 56,
@@ -131,10 +134,13 @@ fn uint Opcode.result_index(self) {
 		case TYPE_FUNCTION:
 		case LABEL:
 			return 1;
+		case UNDEF:
 		case CONSTANT_TRUE:
 		case CONSTANT_FALSE:
 		case CONSTANT:
 		case CONSTANT_COMPOSITE:
+		case CONSTANT_SAMPLER:
+		case CONSTANT_NULL:
 		case FUNCTION:
 		case FUNCTION_PARAMETER:
 		case VARIABLE:

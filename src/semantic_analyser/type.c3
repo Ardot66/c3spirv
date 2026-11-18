@@ -72,6 +72,8 @@ fn SpirvType* copy_type_unresolved(SemaContext* context, SpirvType* type) {
 
 	new.resolved = false;
 	new.original = null;
+	// Set up the dependency chain to be circular, which makes calculations simpler.
+	new.dependent = new;
 	return new;
 }
 
@@ -98,44 +100,76 @@ fn void resolve_type_final(SemaContext* context, SpirvType* type) {
 	type.original = type;
 }
 
-fn void? resolve_type(SemaContext* context, SpirvType* unresolved, SpirvType* resolved, SourceLocId loc) {
-	if(!resolved.resolved) {
-		return err::error(loc, "Cannot assign an unresolved type.")~;
+fn void mark_type_dependency(SpirvType* a, SpirvType* b) {
+	SpirvType* a_last = a;	
+	// Find the last type in a's chain. 
+	while(a_last.dependent != a) {
+		// Skip if a and b are already dependent.
+		if(a_last.dependent == b) {
+			return;
+		}
+		a_last = a_last.dependent;
 	}
 
-	if(unresolved.resolved) {
-		if(!types_equal(unresolved, resolved)) {
+	SpirvType* b_last = b;	
+	// Find the last type in b's chain. 
+	while(b_last.dependent != b) {
+		b_last = b_last.dependent;
+	}
+
+	// Link a's chain and b's chain together.
+	a_last.dependent = b;
+	b_last.dependent = a;
+}
+
+fn void? resolve_types(SemaContext* context, SpirvType* type_a, SpirvType* type_b, SourceLocId loc) {
+	if(type_a.resolved && type_b.resolved) {
+		if(!types_equal(type_a, type_b)) {
 			return err::error(loc, "Unable to resolve conflicting types.")~;
 		}
-
 		return;
 	}
 
-	assert(unresolved.kind == resolved.kind);
-
-	switch(unresolved.kind) {
-		case TYPE_POINTER: resolve_type(context, unresolved.pointer.inner, resolved.pointer.inner, loc)!;
+	assert(type_a.kind == type_b.kind);
+	switch(type_a.kind) {
+		case TYPE_POINTER: resolve_types(context, type_a.pointer.inner, type_b.pointer.inner, loc)!;
 		case TYPE_STRUCT:
-			assert(unresolved.structure.members.len == resolved.structure.members.len);
-			for(sz i = 0; i < unresolved.structure.members.len; i++) {
-				resolve_type(
+			assert(type_a.structure.members.len == type_b.structure.members.len);
+			for(sz i = 0; i < type_a.structure.members.len; i++) {
+				resolve_types(
 					context, 
-					unresolved.structure.members[i], 
-					resolved.structure.members[i], 
+					type_a.structure.members[i], 
+					type_b.structure.members[i], 
 					loc
 				)!;
 			}
-		case TYPE_VECTOR: resolve_type(context, unresolved.vector.member, resolved.vector.member, loc)!;
+		case TYPE_VECTOR: resolve_types(context, type_a.vector.member, type_b.vector.member, loc)!;
 	}
 
-	// Need to track the next type in the chain to ensure that type resolution doesn't break.
-	SpirvType* next = unresolved.next;
+	// If both types are unresolved we mark them as dependent so that they can
+	// be resolved together later.
+	if(!type_a.resolved && !type_b.resolved) {
+		mark_type_dependency(type_a, type_b);
+	} else {
+		SpirvType* resolved = type_a.resolved ? type_a : type_b;
+		SpirvType* first_unresolved = type_a.resolved ? type_b : type_a;
 
-	// Ensure that the types are byte-for-byte identical. The SpirvType.original field ensures
-	// that only the original version will be used for ID emission to make things more efficient
-	// when lots of copies are involved.
-	*unresolved = *resolved;
-	unresolved.next = next;
+		// Resolved all dependent types.
+		SpirvType* unresolved = first_unresolved;
+		do {
+			// Need to track the next type in the chain to ensure that type resolution doesn't break.
+			SpirvType* next = unresolved.next;
+			SpirvType* dependent = unresolved.dependent;
+
+			// Ensure that the types are byte-for-byte identical. The SpirvType.original field ensures
+			// that only the original version will be used for ID emission to make things more efficient
+			// when lots of copies are involved.
+			*unresolved = *resolved;
+			unresolved.next = next;
+
+			unresolved = dependent;
+		} while(unresolved != first_unresolved);
+	}
 }
 
 enum PointerMode {

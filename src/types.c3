@@ -19,15 +19,22 @@ struct SpirvEntryPoint {
 struct SpirvType {
 	Type* type;
 	Id id;
+	Id null_id;
 	bitstruct : uint {
 		TypeKind kind : 0..16;
 		// Whether the type an all subtypes have had their storage class
 		// determined.
 		bool resolved : 17;
+		bool null_emitted : 18;
 	}
 	// If this type was resolved, it is going to be a copy of another existing type.
 	// This variable points back to that existing type to make codegen more efficient.	 
 	SpirvType* original;
+
+	// Tracks dependencies between unresolved types. If a unresolved type is assigned to
+	// another unresolved type, then they must effectively be the same type and be resolved
+	// simultaneously. This pointer forms a looping chain of dependent types.
+	SpirvType* dependent;
 
 	// All SpirvTypes are stored in a linked list so that they can be fully resolved
 	// in another sema pass.

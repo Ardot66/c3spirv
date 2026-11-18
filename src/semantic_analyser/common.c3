@@ -41,7 +41,7 @@ fn void? analyse_assignment(SemaContext* context, ExprType variable, ExprType va
 		return err::error(loc, "Cannot assign to this value, it is not a reference.")~;
 	}
 
-	resolve_type(context, variable.ref, value.ref, loc)!;
+	resolve_types(context, variable.ref, value.ref, loc)!;
 }
 
 fn ExprType expr_deref(ExprType type) {

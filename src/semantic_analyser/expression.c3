@@ -84,16 +84,23 @@ fn ExprType? analyse_cond(SemaContext* context, SpirvExpr* spirv_expr) {
 	return analyse_expression(context, expressions[^1]).type!;
 }
 
+fn void? analyse_const_initializer_vec(SemaContext* context, ConstInitializer** vec, SourceLocId loc) {
+	foreach(ConstInitializer* member : ast::vec(vec)) {
+		analyse_const_initializer(context, member, loc)!;
+	}
+}
+
 fn void? analyse_const_initializer(SemaContext* context, ConstInitializer* init, SourceLocId loc) {
 	switch(init.kind) {
+		case CONST_INIT_ZERO: break;
+		case CONST_INIT_STRUCT: analyse_const_initializer_vec(context, init.init_struct, loc)!;
 		case CONST_INIT_VALUE:
 			// Don't need to bother with types here, because constant stuff is guaranteed
 			// to be nicely logical.
-			analyse_expression(context, init.init_value)!;
-		case CONST_INIT_ARRAY_FULL: 
-			foreach(ConstInitializer* member : ast::vec(init.init_array_full)) {
-				analyse_const_initializer(context, member, loc)!;
-			}
+	 		analyse_expression(context, init.init_value)!;
+		case CONST_INIT_ARRAY: analyse_const_initializer_vec(context, init.init_array.elements, loc)!;
+		case CONST_INIT_ARRAY_FULL: analyse_const_initializer_vec(context, init.init_struct, loc)!;
+		case CONST_INIT_ARRAY_VALUE: analyse_const_initializer(context, init.init_array_value.element, loc)!;
 		default: return err::error(loc, "Unsupported const initializer kind: %s", ast::const_name(init.kind))~;
 	}
 }
@@ -140,7 +147,7 @@ fn ExprType? analyse_const(SemaContext* context, SpirvExpr* spirv_expr) {
 
 
 	// Override the type kind here in case we need to truncate it.
-	return expr_type(analyse_type(context, type, spirv_expr.expression.loc, LOGICAL))!;
+	return expr_type(analyse_type(context, type, spirv_expr.expression.loc, UNRESOLVED))!;
 }
 
 fn ExprType? analyse_ext_trunc(SemaContext* context, SpirvExpr* spirv_expr) {
