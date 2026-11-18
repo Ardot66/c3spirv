@@ -52,6 +52,11 @@ fn void error_msg(SourceLocId loc_id, String error_kind, String format, args...)
 	SourceLoc* loc = ast::source_loc_ptr(loc_id);
 	ast::File* file = ast::gc().loaded_sources[loc.file_id];
 
+	if(c3spirv::arg_context.test_mode) @pool() {
+		io::eprintf("Error|%s|%s|%s|%s", ast::c_string(file.name), loc.row, loc.col, string::tformat(format, ...args));
+		return;
+	};
+
 	LineInfo[7] lines;
 	file.get_lines(loc.offset, &lines, before: 6);
 

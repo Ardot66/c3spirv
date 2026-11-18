@@ -14,7 +14,7 @@
   // Sources compiled for all targets.
   "sources": [ "src/**" ],
   // Test sources compiled for all targets.
-  "test-sources": [ "test/**" ],
+  "test-sources": [ "test/*.c3" ],
   // C sources if the project also compiles C sources
   // relative to the project file.
   // "c-sources": [ "csource/**" ],
@@ -31,10 +31,14 @@
   "targets": {
     "c3spirv": {
       // Executable or library.
-      "type": "executable",
+      "type": "executable"
       // Additional libraries, sources
       // and overrides of global settings here.
     },
+    "test": {
+      "type": "executable",
+      "sources-override": [ "scripts/test_suite_runner.c3" ]
+    }
   },
   // Global settings.
   // CPU name, used for optimizations in the LLVM backend.

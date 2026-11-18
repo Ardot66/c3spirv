@@ -2,6 +2,12 @@ module ardot::c3spirv;
 import ardot::c3c::ast;
 import std::io, std::collections::map;
 
+struct ArgContext {
+	bool test_mode;
+}
+
+ArgContext arg_context;
+
 Type* bool_type;
 Type* int_type;
 Type* uint_type;
@@ -22,7 +28,13 @@ fn int main(String[] args) @public
 {
 	// emit_sample_program();
 
-	C3GlobalContext* gc = ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
+	if(args.len == 2) {
+		arg_context.test_mode = true;
+		ast::load_ast({"c3cdev", "compile-only", "--ast-dump", "--no-obj", args[1], "src/lib.c3"})!!;
+	} else {
+		ast::load_ast({"c3cdev", "build", "--ast-dump"})!!;
+	}
+
     defer ast::free_ast();
 
 	GlobalContext context;
