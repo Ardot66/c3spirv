@@ -70,31 +70,6 @@ fn ExprType expr_addr(ExprType type) {
 	};
 }
 
-fn Expr*[] eval_untyped_list(Expr *expr) {
-	ExprConst* const_values = &expr.const_expr;
-	assert(const_values.const_kind == CONST_UNTYPED_LIST);
-
-	Expr** values = const_values.untyped_list;
-	return ast::vec(values);
-}
-
-fn long eval_const_enum(Expr* expr) {
-	ExprConst* enum_const = &expr.const_expr;
-	assert(enum_const.const_kind == CONST_ENUM);
-
-	EnumConstantDecl* enum_decl = &enum_const.enum_val.enum_constant;
-	assert(!enum_decl.is_raw);
-
-	return enum_decl.inner_ordinal;
-}
-
-fn long eval_const_int(Expr* expr) {
-	ExprConst* const_value = &expr.const_expr;
-	assert(const_value.const_kind == CONST_INTEGER);
-
-	return (long)const_value.ixx.i.low;
-}
-
 fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 	if(!decl.has_tag) {
 		return NOT_FOUND~;
@@ -117,8 +92,8 @@ fn Expr*[]? get_attribute(Decl* decl, Attribute attribute) {
 				break;
 			}
 
-			Expr*[] values = eval_untyped_list(tag.exprs[1]);
-			long enum_value = eval_const_enum(values[0]);
+			Expr*[] values = ast::eval_untyped_list(tag.exprs[1]);
+			long enum_value = ast::eval_const_enum(values[0]);
 			if(attribute.ordinal != enum_value) {
 				break;
 			}

@@ -24,16 +24,16 @@ fn void? analyse_entry_point(SemaContext* context, Decl* decl) {
 	});
 	context.global.entry_points.push(entry_point);
 
-	ExecutionModel execution_model = (ExecutionModel)eval_const_int(attribute_params[0]);
+	ExecutionModel execution_model = (ExecutionModel)ast::eval_const_int(attribute_params[0]);
 	entry_point.model = execution_model;
 	switch(execution_model) {
 		case COMPUTE:
 			uint[<3>] group_size;
 			ExprConst* const_value = &attribute_params[1].const_expr;
 			ConstInitializer*[] initializers = ast::vec(const_value.initializer.init_array_full);
-			group_size.x = (uint)eval_const_int(initializers[0].init_value);
-			group_size.y = (uint)eval_const_int(initializers[1].init_value);
-			group_size.z = (uint)eval_const_int(initializers[2].init_value);
+			group_size.x = (uint)ast::eval_const_int(initializers[0].init_value);
+			group_size.y = (uint)ast::eval_const_int(initializers[1].init_value);
+			group_size.z = (uint)ast::eval_const_int(initializers[2].init_value);
 			entry_point.compute.group_size = group_size;
 	}
 

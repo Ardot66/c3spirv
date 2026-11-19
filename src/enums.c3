@@ -257,10 +257,6 @@ constdef SelectionControl : inline uint {
 	DONT_FLATTEN = 2,
 }
 
-constdef Builtin : inline uint {
-	GLOBAL_INVOCATION_ID = 28,
-}
-
 bitstruct FunctionControl : uint {
 	bool force_inline : 0;
 	bool no_inline : 1;

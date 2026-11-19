@@ -145,7 +145,6 @@ fn void? analyse_const(SemaContext* context, SpirvExpr* spirv_expr) {
 		default: return err::error(spirv_expr.expression.loc, "Unsupported const kind: %s", ast::const_name(const_e.const_kind))~;
 	}
 
-	// Override the type kind here in case we need to truncate it.
 	spirv_expr.type = expr_type(analyse_type(context, type, spirv_expr.expression.loc, UNRESOLVED))!;
 }
 
@@ -240,29 +239,35 @@ fn void? analyse_unary(SemaContext* context, SpirvExpr* spirv_expr) {
 	}
 }
 
-fn SpirvType*? analyse_builtin_call(SemaContext* context, SpirvExpr* spirv_expression, Expr*[] attribute_params) {
-	Expr* expression = spirv_expression.expression;
-	ExprCall* call = &expression.call_expr;
-	ShaderBuiltin builtin = (ShaderBuiltin)eval_const_enum(attribute_params[0]);
-	Type* rtype = expression.type;
+fn void? assert_expr_const(Expr*... expressions) {
+	foreach(Expr* expression : expressions) {
+		if(expression.expr_kind != EXPR_CONST) {
+			return err::error(expression.loc, "Expression must be constant.")~;
+		}
+	}
+}
 
-	spirv_expression.call = {
+fn SpirvType*? analyse_builtin_io(SemaContext* context, SpirvExpr* spirv_expr, PointerMode pointer_mode, StorageClass class) {
+	assert_expr_const(...ast::vec(spirv_expr.expression.call_expr.arguments))!;
+	SpirvType* spirv_inner = analyse_type(context, spirv_expr.expression.type.pointer, spirv_expr.expression.loc, pointer_mode)!;
+	return create_type_pointer(context, spirv_expr.expression.type, class, spirv_inner);
+}
+
+fn SpirvType*? analyse_builtin_call(SemaContext* context, SpirvExpr* spirv_expr, Expr*[] attribute_params) {
+	ShaderBuiltin builtin = (ShaderBuiltin)ast::eval_const_enum(attribute_params[0]);
+
+	spirv_expr.call = {
 		.is_builtin = true,
 		.builtin = builtin,
 	};
 
 	switch(builtin) {
-		case GET_ROOT:
-			Type* inner = rtype.pointer;
-			if(inner.type_kind != TYPE_STRUCT) {
-				return err::error(expression.loc, "The root type must be a struct.")~;
-			}
-
-			SpirvType* spirv_inner = analyse_type(context, inner, expression.loc, PHYSICAL)!;
-			return create_type_pointer(context, rtype, UNIFORM, spirv_inner);
-		case GET_GLOBAL_INVOCATION_ID:
-			return analyse_type(context, rtype, expression.loc, LOGICAL)!;
-		default: return err::error(expression.loc, "Unsupported builtin.")~;
+		case UNIFORM_INPUT: return analyse_builtin_io(context, spirv_expr, PHYSICAL, UNIFORM);
+		case BUILTIN_INPUT: return analyse_builtin_io(context, spirv_expr, LOGICAL, INPUT);
+		case BUILTIN_OUTPUT: return analyse_builtin_io(context, spirv_expr, LOGICAL, OUTPUT);
+		case PIPELINE_INPUT: return analyse_builtin_io(context, spirv_expr, PHYSICAL, INPUT);
+		case PIPELINE_OUTPUT: return analyse_builtin_io(context, spirv_expr, PHYSICAL, OUTPUT);
+		default: return err::error(spirv_expr.expression.loc, "Unsupported builtin.")~;
 	}
 }
 

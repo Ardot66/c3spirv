@@ -127,25 +127,42 @@ fn void add_func_interface(GenContext* context, Id interface_id) {
 	}
 }
 
+fn Id emit_interface_var(GenContext* context, Id type, StorageClass class) {
+	Id id = context.type_op(VARIABLE, type, class);
+	add_func_interface(context, id);
+	return id;
+}
+
+fn void emit_interface_decoration(GenContext* context, Id interface_id, Decoration decoration, Expr* value){
+	context.decoration_op(DECORATE, interface_id, decoration, (uint)ast::eval_const_int(value));
+}
+
 fn Id emit_builtin_call(GenContext* context, SpirvExpr* spirv_expr) {
 	ShaderBuiltin builtin = spirv_expr.call.builtin;
 	Expr* expression = spirv_expr.expression;
+	Expr*[] parameters = ast::vec(expression.call_expr.arguments);
+
 	Id expr_type = type_id(context, spirv_expr.type.ref);
 
 	Id id;
 	switch(builtin) {
-		case GET_ROOT:
-			id = context.type_op(VARIABLE, expr_type, StorageClass.UNIFORM);
-			add_func_interface(context, id);
-			context.decoration_op(DECORATE, id, Decoration.BINDING, 0);
-			context.decoration_op(DECORATE, id, Decoration.DESCRIPTOR_SET, 0);
-		case GET_GLOBAL_INVOCATION_ID:
-			Id expr_pointer = context.type_op(TYPE_POINTER, StorageClass.INPUT, expr_type);
-			Id var_id = context.type_op(VARIABLE, expr_pointer, StorageClass.INPUT);
-			add_func_interface(context, var_id);
-			context.decoration_op(DECORATE, var_id, Decoration.BUILTIN, Builtin.GLOBAL_INVOCATION_ID);
-
-			id = context.func_op(LOAD, expr_type, var_id);
+		case UNIFORM_INPUT:
+			id = emit_interface_var(context, expr_type, UNIFORM);
+			emit_interface_decoration(context, id, BINDING, parameters[0]);
+			emit_interface_decoration(context, id, DESCRIPTOR_SET, parameters[1]);
+		case BUILTIN_INPUT:
+			id = emit_interface_var(context, expr_type, INPUT);
+			emit_interface_decoration(context, id, BUILTIN, parameters[0]);
+		case BUILTIN_OUTPUT:
+			id = emit_interface_var(context, expr_type, OUTPUT);
+			emit_interface_decoration(context, id, BUILTIN, parameters[0]);
+		case PIPELINE_INPUT:
+			id = emit_interface_var(context, expr_type, INPUT);
+			emit_interface_decoration(context, id, BINDING, parameters[0]);
+		case PIPELINE_OUTPUT:
+			id = emit_interface_var(context, expr_type, OUTPUT);
+			emit_interface_decoration(context, id, BINDING, parameters[0]);
+		default: unreachable();
 	}
 
 	assert(id);
